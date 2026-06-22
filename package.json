@@ -16,7 +16,9 @@
     "contracts:test": "cargo +nightly test --manifest-path contracts/Cargo.toml",
     "lib:test": "tsx lib/test/selftest.ts",
     "typecheck": "tsc -p lib/tsconfig.json && tsc -p app/tsconfig.json",
-    "dev": "npm run dev --workspace app",
+    "server": "tsx server/index.ts",
+    "dev:app": "npm run dev --workspace app",
+    "dev": "concurrently -n server,app -c magenta,cyan \"npm:server\" \"npm:dev:app\"",
     "build": "npm run build --workspace app",
     "deploy:testnet": "tsx scripts/deploy.ts",
     "demo:e2e": "tsx scripts/e2e.ts"
@@ -29,9 +31,14 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "concurrently": "^10.0.3",
     "puppeteer-core": "^25.2.0",
     "qrcode": "^1.5.4",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.6",
+    "hono": "^4.12.26"
   }
 }

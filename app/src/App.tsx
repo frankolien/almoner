@@ -124,8 +124,8 @@ export default function App() {
         </button>
       </nav>
 
-      {deployment && activeTab === 'org' && <OrgAdmin store={store} deployment={deployment} />}
-      {deployment && activeTab === 'auditor' && <Auditor store={store} deployment={deployment} />}
+      {deployment && activeTab === 'org' && <OrgAdmin store={store} />}
+      {deployment && activeTab === 'auditor' && <Auditor store={store} />}
     </div>
   );
 }

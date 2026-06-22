@@ -75,20 +75,34 @@ function main(): void {
   }
   console.log('  Relayer:', relayer.pub);
 
-  const deployment = {
+  // Public config (committed) — no secrets ever.
+  const publicConfig = {
     poolContractId,
     usdcTokenId,
     adminPublicKey: org.pub,
-    adminSecret: org.sec, // testnet-only throwaway key, for the one-click demo
     relayerPublicKey: relayer.pub,
-    relayerSecret: relayer.sec,
     network: NETWORK,
   };
   const out = path.join(ROOT, 'app/public/deployment.json');
   fs.mkdirSync(path.dirname(out), { recursive: true });
-  fs.writeFileSync(out, JSON.stringify(deployment, null, 2));
+  fs.writeFileSync(out, JSON.stringify(publicConfig, null, 2) + '\n');
 
-  console.log('\n✓ Deployed. Wrote app/public/deployment.json');
+  // Secrets -> .env (gitignored). Production: load from KMS/Vault instead.
+  const envBody = [
+    '# Almoner secrets — gitignored. NEVER commit. Production: KMS/Vault.',
+    `NETWORK=${NETWORK}`,
+    `POOL_CONTRACT_ID=${poolContractId}`,
+    `USDC_TOKEN_ID=${usdcTokenId}`,
+    `ADMIN_PUBLIC_KEY=${org.pub}`,
+    `ADMIN_SECRET=${org.sec}`,
+    `RELAYER_PUBLIC_KEY=${relayer.pub}`,
+    `RELAYER_SECRET=${relayer.sec}`,
+    'RELAYER_PORT=8787',
+    '',
+  ].join('\n');
+  fs.writeFileSync(path.join(ROOT, '.env'), envBody);
+
+  console.log('\n✓ Deployed. Wrote app/public/deployment.json (public) + .env (secrets)');
   console.log(`  pool  ${poolContractId}`);
   console.log(`  usdc  ${usdcTokenId}`);
 }

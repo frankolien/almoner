@@ -12,22 +12,27 @@ export interface Deployment {
   poolContractId: string;
   usdcTokenId: string;
   adminPublicKey?: string;
-  adminSecret?: string; // testnet-only convenience for the demo org account
   relayerPublicKey?: string;
-  relayerSecret?: string; // pays fees + sponsors fresh accounts (server-side in prod)
-  programId?: number;
+  network?: string;
 }
 
-// The deploy script writes app/public/deployment.json; the app reads it at
-// runtime so a redeploy doesn't require rebuilding the frontend.
+// Public config comes from the backend (/api/config) — no secrets ever reach
+// the browser. Falls back to the committed public deployment.json if the
+// backend isn't running (read-only display only; signing needs the server).
 export async function loadDeployment(): Promise<Deployment | null> {
   try {
-    const res = await fetch('/deployment.json', { cache: 'no-store' });
-    if (!res.ok) return null;
-    return (await res.json()) as Deployment;
+    const res = await fetch('/api/config', { cache: 'no-store' });
+    if (res.ok) return (await res.json()) as Deployment;
   } catch {
-    return null;
+    /* backend not up — fall through */
   }
+  try {
+    const res = await fetch('/deployment.json', { cache: 'no-store' });
+    if (res.ok) return (await res.json()) as Deployment;
+  } catch {
+    /* no public config */
+  }
+  return null;
 }
 
 export const explorerTx = (hash: string) => `${NETWORK.explorer}/tx/${hash}`;

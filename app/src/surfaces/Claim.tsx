@@ -47,7 +47,7 @@ export default function Claim({ credentialStr, deployment }: { credentialStr: st
     setDoubleClaim(null);
     clear();
     try {
-      setResult(await claimFromCredential(cred!, deployment, log));
+      setResult(await claimFromCredential(cred!, log));
     } catch (e) {
       log(e instanceof Error ? e.message : String(e), 'err');
     } finally {
@@ -59,7 +59,7 @@ export default function Claim({ credentialStr, deployment }: { credentialStr: st
     if (!deployment) return;
     setBusy(true);
     try {
-      setDoubleClaim(await reclaimFromCredential(cred!, deployment, log));
+      setDoubleClaim(await reclaimFromCredential(cred!, log));
     } catch (e) {
       log(e instanceof Error ? e.message : String(e), 'err');
     } finally {

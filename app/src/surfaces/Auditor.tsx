@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import type { DemoStore } from '../lib/store.js';
-import type { Deployment } from '../lib/config.js';
 import { runAudit } from '../lib/demo.js';
 import type { AuditReport } from '@almoner/lib';
 import { usdc } from '../lib/ui.js';
 
-export default function Auditor({ store, deployment }: { store: DemoStore; deployment: Deployment }) {
+export default function Auditor({ store }: { store: DemoStore }) {
   const [report, setReport] = useState<AuditReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -23,7 +22,7 @@ export default function Auditor({ store, deployment }: { store: DemoStore; deplo
     setBusy(true);
     setErr(null);
     try {
-      setReport(await runAudit(store, deployment));
+      setReport(await runAudit(store));
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {

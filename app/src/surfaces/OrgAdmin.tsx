@@ -2,7 +2,6 @@ import { useState } from 'react';
 import QRCode from 'qrcode';
 import { buildCohort } from '@almoner/lib';
 import type { DemoStore } from '../lib/store.js';
-import type { Deployment } from '../lib/config.js';
 import { registerCohort, fundProgram, toRecord, DEMO } from '../lib/demo.js';
 import { buildCredential, credentialUrl } from '../lib/credential.js';
 import { ActivityLog, useLog, usdc } from '../lib/ui.js';
@@ -14,7 +13,7 @@ interface ActiveCred {
   qr: string;
 }
 
-export default function OrgAdmin({ store, deployment }: { store: DemoStore; deployment: Deployment }) {
+export default function OrgAdmin({ store }: { store: DemoStore }) {
   const { lines, log, clear } = useLog();
   const [busy, setBusy] = useState(false);
   const [active, setActive] = useState<ActiveCred | null>(null);
@@ -65,12 +64,12 @@ export default function OrgAdmin({ store, deployment }: { store: DemoStore; depl
         </div>
         <div className="spacer" />
         <div className="row">
-          <button className="primary" onClick={() => run(() => registerCohort(store, deployment, log))} disabled={busy}>
+          <button className="primary" onClick={() => run(() => registerCohort(store, log))} disabled={busy}>
             {state.createdOnChain ? 'Re-register a fresh cohort' : 'Register cohort + post root on-chain'}
           </button>
           <button
             className="ghost"
-            onClick={() => run(() => fundProgram(store, deployment, 500, log))}
+            onClick={() => run(() => fundProgram(store, 500, log))}
             disabled={busy || !state.createdOnChain}
           >
             Fund pool (+500 USDC)

@@ -39,12 +39,16 @@ import {
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const WASM = path.join(ROOT, 'circuits/build/aid_claim_js/aid_claim.wasm');
 const ZKEY = path.join(ROOT, 'circuits/build/aid_claim.zkey');
-const dep = JSON.parse(fs.readFileSync(path.join(ROOT, 'app/public/deployment.json'), 'utf8'));
+try {
+  process.loadEnvFile(path.join(ROOT, '.env'));
+} catch {
+  /* env vars already set */
+}
 
-const POOL = dep.poolContractId as string;
-const TOKEN = dep.usdcTokenId as string;
-const org = Keypair.fromSecret(dep.adminSecret as string);
-const relayer = Keypair.fromSecret((dep.relayerSecret ?? dep.adminSecret) as string);
+const POOL = process.env.POOL_CONTRACT_ID as string;
+const TOKEN = process.env.USDC_TOKEN_ID as string;
+const org = Keypair.fromSecret(process.env.ADMIN_SECRET as string);
+const relayer = Keypair.fromSecret((process.env.RELAYER_SECRET ?? process.env.ADMIN_SECRET) as string);
 
 // program parameters
 const REGION = 963n;

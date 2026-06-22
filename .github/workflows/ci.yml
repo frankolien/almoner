@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: Frontend + lib (typecheck, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck lib
+        run: npx tsc -p lib/tsconfig.json --noEmit
+      - name: Typecheck app
+        run: npx tsc -p app/tsconfig.json --noEmit
+      - name: Build app
+        run: npm run build --workspace app
+
+  contracts:
+    name: Soroban contract (test + wasm build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust nightly + targets
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+          targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts
+      - name: Unit tests
+        run: cargo +nightly test --manifest-path contracts/Cargo.toml
+      - name: Build wasm32v1-none
+        run: cargo +nightly build --release --manifest-path contracts/Cargo.toml --target wasm32v1-none -Zbuild-std=core,alloc,panic_abort
+
+  circuit:
+    name: Circuit (compile, setup, proof selftest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install circom
+        run: |
+          curl -sSL -o "$HOME/.local/bin/circom" --create-dirs https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64
+          chmod +x "$HOME/.local/bin/circom"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build circuit + verification key
+        run: |
+          npm run circuit:build
+          npm run gen:vk
+      - name: Prove/verify selftest (JS == circuit)
+        run: npm run lib:test
+      - name: Verify vk.rs is in sync with the circuit
+        run: git diff --exit-code contracts/pool/src/vk.rs
+
+  security:
+    name: Security (deps + secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: npm audit (high+)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

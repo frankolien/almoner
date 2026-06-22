@@ -134,9 +134,11 @@ circuits/   Circom circuit (aid_claim.circom) + Groth16 trusted-setup tooling
 lib/        Shared TypeScript: Poseidon, Merkle tree, nullifiers, witness/prover,
             and the snarkjs→Soroban byte encoding (one source of truth, browser + Node)
 contracts/  Soroban (Rust): the pool contract + an inlined BN254 Groth16 verifier
-app/        React/TS frontend — three surfaces (org admin, beneficiary, auditor)
-scripts/    gen-vk, deploy, e2e, gen-fixture
+server/     Backend (Hono): relayer + operator signing service — holds keys, exposes /api/*
+app/        React/TS frontend — pure client (crypto + proving + UI), no keys
+scripts/    gen-vk, deploy, e2e, gen-fixture, browser-claim
 docs/       ARCHITECTURE.md, DEMO.md
+.github/    CI (app, contracts, circuit selftest, secret scan)
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the deep dive (circuit signals, the recipient
@@ -182,18 +184,26 @@ npm run gen:vk
 npm run contracts:build
 npm run contracts:test
 
-# 4) Deploy USDC + the pool to testnet (writes app/public/deployment.json)
+# 4) Deploy USDC + the pool to testnet
+#    Writes public config to app/public/deployment.json AND secrets to .env (gitignored)
 npm run deploy:testnet
 
 # 5) Run the whole flow against testnet (prove → claim → double-claim → reconstruct)
 npm run demo:e2e
 
-# 6) The three-surface demo UI
-npm run dev      # http://localhost:5173
+# 6) Run the app — starts the backend (relayer + operator API) AND the UI together
+npm run dev      # API on :8787, UI on http://localhost:5173
 ```
 
 > **Build note:** soroban-sdk 26 requires the `wasm32v1-none` target. `npm run contracts:build`
 > uses `cargo -Zbuild-std` (nightly) so no extra target download is needed.
+
+### Keys never touch the browser
+
+`npm run dev` runs a **backend** (`server/`, Hono) that holds the org + relayer keys (from `.env`) and
+does all chain-signing — the org creates programs, and the relayer sponsors fresh accounts + pays claim
+fees. The frontend is a pure client: it generates the proof on-device and posts it to the relayer. Secrets
+live only in `.env` (gitignored; production: KMS/Vault), never in the repo or the browser.
 
 ---
 

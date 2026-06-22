@@ -195,7 +195,21 @@ trustline. The beneficiary ends up with a funded, trustline-ready wallet holding
 nothing. The relayer sees only a valid proof + a fresh address, so it can't deanonymize anyone. Validated
 end-to-end on testnet by `scripts/e2e.ts` and in a real browser by `scripts/browser-claim.ts`.
 
-### Off-code in v1 (documented limits)
+### Backend (`server/`) — keys never in the browser
 
-Org account = single testnet key (prod: multisig / HSM); relayer key in-browser for the demo (prod:
-server-side relayer service); anchor cash-out referenced, not integrated.
+Relayer + operator signing lives in a backend service (Hono). It holds the org and relayer keys from the
+environment and exposes `/api/program`, `/api/fund`, `/api/sponsor`, `/api/claim`, plus reads. The frontend
+is a pure client: it generates the proof on-device and posts it; it never holds a key. Public config is
+served from `/api/config`; secrets live only in `.env` (gitignored). CI in `.github/workflows` runs the app
+typecheck/build, contract tests + wasm build, the circuit proof selftest, a vk.rs-sync check, and a secret scan.
+
+### Still off-code in v1 (documented limits)
+
+- Org key = single env key → production: multisig / HSM, or operator Freighter wallet + RBAC.
+- Keys loaded from `.env` → production: KMS / Vault.
+- Sponsorship server-generates the fresh wallet → production: client-generated key + validated co-sign
+  (fully non-custodial), plus relayer rate-limiting / Sybil resistance / a permissionless fallback.
+- Registration table (PII) generated on the operator device → production: encrypted server storage +
+  cryptographic view-key for the auditor.
+- Anchor cash-out referenced, not integrated; ZK trusted setup is a dev ceremony (prod: public MPC or a
+  transparent proof system); contract is unaudited.

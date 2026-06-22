@@ -1,7 +1,8 @@
-// Orchestration shared by the surfaces. The org registers + funds + issues
-// credentials; the beneficiary claims from a credential with the relayer
-// sponsoring all gas; the auditor reconstructs. Thin glue over @almoner/lib
-// (crypto/proving) and ./pool (the on-chain client validated by scripts/e2e.ts).
+// Orchestration shared by the surfaces. The browser does only crypto + proving;
+// every chain-signing op goes through the backend (./serverApi). The org's
+// cohort secrets are generated here (operator device) and handed out as
+// credentials; the eligibility proof is generated on the beneficiary's device
+// and only submitted to the relayer — the secret never leaves the browser.
 import {
   issueBeneficiary,
   buildCohort,
@@ -16,16 +17,13 @@ import {
 } from '@almoner/lib';
 import { StrKey } from '@stellar/stellar-sdk';
 import {
-  Keypair,
-  createProgram,
-  fundPool,
-  claim,
-  spentNullifiers,
-  sponsorFreshAccount,
-  usdcBalance,
-  xlmBalance,
-} from './pool.js';
-import type { Deployment } from './config.js';
+  apiCreateProgram,
+  apiFund,
+  apiSponsor,
+  apiClaim,
+  apiSpent,
+  apiBalance,
+} from './serverApi.js';
 import type { DemoStore, StoredRecord, ProgramMeta } from './store.js';
 import { credToRecord, credToPolicy, type Credential } from './credential.js';
 
@@ -43,10 +41,6 @@ export const DEMO = {
 
 export type Logger = (msg: string, kind?: 'step' | 'ok' | 'err' | 'info') => void;
 const hex = (u: Uint8Array) => Buffer.from(u).toString('hex');
-
-export const orgKeypair = (d: Deployment): Keypair => Keypair.fromSecret(d.adminSecret!);
-export const relayerKeypair = (d: Deployment): Keypair =>
-  Keypair.fromSecret((d.relayerSecret ?? d.adminSecret)!);
 
 const NAMES = ['Amara', 'Bilal', 'Carmen', 'Dawit', 'Esra', 'Farid', 'Gita', 'Hassan'];
 
@@ -81,8 +75,8 @@ function freshProgramId(): number {
   return 1000 + (a[0] % 9_000_000);
 }
 
-/** Org: issue a cohort, commit the Merkle root on-chain, register the program. */
-export async function registerCohort(store: DemoStore, d: Deployment, log: Logger): Promise<void> {
+/** Org: issue a cohort (operator device), then the backend posts the root + policy. */
+export async function registerCohort(store: DemoStore, log: Logger): Promise<void> {
   log('Issuing beneficiary secrets and computing leaf commitments…', 'step');
   const records: BeneficiaryRecord[] = Array.from({ length: DEMO.cohortSize }, (_, i) =>
     issueBeneficiary({
@@ -99,7 +93,7 @@ export async function registerCohort(store: DemoStore, d: Deployment, log: Logge
   log(`Cohort root ${merkleRootHex.slice(0, 16)}… built (${DEMO.cohortSize} beneficiaries)`, 'info');
 
   log(`Posting root + policy on-chain (program #${programId})…`, 'step');
-  await createProgram(orgKeypair(d), d.poolContractId, {
+  await apiCreateProgram({
     programId,
     merkleRootHex,
     allowedRegion: DEMO.region,
@@ -125,11 +119,11 @@ export async function registerCohort(store: DemoStore, d: Deployment, log: Logge
   log('Program registered. Issue claim credentials to your beneficiaries.', 'ok');
 }
 
-/** Org/donor: fund the USDC pool. */
-export async function fundProgram(store: DemoStore, d: Deployment, usdcWhole: number, log: Logger): Promise<void> {
+/** Org/donor: fund the USDC pool (operator-signed by the backend). */
+export async function fundProgram(store: DemoStore, usdcWhole: number, log: Logger): Promise<void> {
   const amount = BigInt(Math.round(usdcWhole * 1e7));
   log(`Funding pool with ${usdcWhole} USDC…`, 'step');
-  await fundPool(orgKeypair(d), d.poolContractId, orgKeypair(d).publicKey(), amount);
+  await apiFund(amount);
   store.update((s) => ({ ...s, fundedAmount: (BigInt(s.fundedAmount) + amount).toString() }));
   log('Pool funded.', 'ok');
 }
@@ -160,54 +154,41 @@ async function proveFor(cred: Credential, freshPublicKey: string) {
   };
 }
 
-/** Beneficiary: claim from a credential. The relayer sponsors all gas. */
-export async function claimFromCredential(cred: Credential, d: Deployment, log: Logger): Promise<ClaimResult> {
-  const relayer = relayerKeypair(d);
-  const issuer = d.adminPublicKey!;
-
+/** Beneficiary: claim from a credential. The relayer (backend) sponsors all gas. */
+export async function claimFromCredential(cred: Credential, log: Logger): Promise<ClaimResult> {
   log('Creating a fresh, unlinkable wallet — gas sponsored, you pay nothing…', 'step');
-  const fresh = Keypair.random();
-  await sponsorFreshAccount(relayer, fresh, issuer);
-  log(`Fresh wallet ${fresh.publicKey().slice(0, 10)}… ready (you hold 0 XLM).`, 'info');
+  const { freshPublicKey, freshSecret } = await apiSponsor();
+  log(`Fresh wallet ${freshPublicKey.slice(0, 10)}… ready (you hold 0 XLM).`, 'info');
 
   log('Generating your Groth16 proof on this device…', 'step');
   const t0 = performance.now();
-  const { nullifierHashHex, proofHex } = await proveFor(cred, fresh.publicKey());
+  const { nullifierHashHex, proofHex } = await proveFor(cred, freshPublicKey);
   log(`Proof generated in ${Math.round(performance.now() - t0)}ms — your secret never left this device.`, 'info');
 
   log('Submitting — proof verified on-chain by the Soroban pool…', 'step');
-  const txHash = await claim(relayer, d.poolContractId, {
+  const { txHash } = await apiClaim({
     programId: cred.programId,
     nullifierHashHex,
-    recipient: fresh.publicKey(),
+    recipient: freshPublicKey,
     payoutAmount: BigInt(cred.entitlement),
     proof: proofHex,
   });
-  const usdcReceived = await usdcBalance(issuer, fresh.publicKey());
+  const usdcReceived = await apiBalance(freshPublicKey);
   log('USDC delivered to your fresh wallet.', 'ok');
 
-  return {
-    freshPublicKey: fresh.publicKey(),
-    freshSecret: fresh.secret(),
-    txHash,
-    nullifierHashHex,
-    usdcReceived,
-  };
+  return { freshPublicKey, freshSecret, txHash, nullifierHashHex, usdcReceived };
 }
 
 /** Beneficiary: a second claim from the same credential — must be rejected. */
-export async function reclaimFromCredential(cred: Credential, d: Deployment, log: Logger): Promise<boolean> {
-  const relayer = relayerKeypair(d);
-  const issuer = d.adminPublicKey!;
-  const fresh = Keypair.random();
-  await sponsorFreshAccount(relayer, fresh, issuer);
+export async function reclaimFromCredential(cred: Credential, log: Logger): Promise<boolean> {
+  const { freshPublicKey } = await apiSponsor();
   log('Re-proving to a brand-new wallet and trying to claim again…', 'step');
-  const { nullifierHashHex, proofHex } = await proveFor(cred, fresh.publicKey());
+  const { nullifierHashHex, proofHex } = await proveFor(cred, freshPublicKey);
   try {
-    await claim(relayer, d.poolContractId, {
+    await apiClaim({
       programId: cred.programId,
       nullifierHashHex,
-      recipient: fresh.publicKey(),
+      recipient: freshPublicKey,
       payoutAmount: BigInt(cred.entitlement),
       proof: proofHex,
     });
@@ -219,17 +200,11 @@ export async function reclaimFromCredential(cred: Credential, d: Deployment, log
   }
 }
 
-export async function freshXlm(pk: string): Promise<number> {
-  return xlmBalance(pk);
-}
-
 /** Auditor: reconstruct who claimed from the on-chain spent set + registration table. */
-export async function runAudit(store: DemoStore, d: Deployment): Promise<AuditReport> {
+export async function runAudit(store: DemoStore): Promise<AuditReport> {
   const s = store.state;
   if (!s.program) throw new Error('no program registered');
   const records = s.records.map(toRecord);
-  const spent = (await spentNullifiers(d.poolContractId, orgKeypair(d), Number(s.program.programId))).map(
-    (h) => BigInt('0x' + h),
-  );
+  const spent = (await apiSpent(Number(s.program.programId))).map((h) => BigInt('0x' + h));
   return reconstruct(records, BigInt(s.program.programId), spent);
 }

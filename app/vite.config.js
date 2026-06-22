@@ -14,5 +14,10 @@ export default defineConfig({
     esbuildOptions: { target: 'es2022' },
   },
   build: { target: 'es2022' },
-  server: { port: 5173, fs: { allow: ['..'] } },
+  server: {
+    port: 5173,
+    fs: { allow: ['..'] },
+    // proxy API calls to the Almoner backend (relayer + operator signing)
+    proxy: { '/api': 'http://localhost:8787' },
+  },
 });
