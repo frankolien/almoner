@@ -63,11 +63,25 @@ function main(): void {
     '--', 'mint', '--to', poolContractId, '--amount', String(INITIAL_USDC * 1e7),
   ]);
 
+  // Relayer: sponsors fresh beneficiary accounts + pays claim fees (zero-gas
+  // onboarding). In production this is a server-side service, not a stored key.
+  console.log('▸ Provisioning relayer (gas sponsor)…');
+  let relayer: { pub: string; sec: string };
+  try {
+    relayer = { pub: sh('stellar', ['keys', 'address', 'relayer']), sec: sh('stellar', ['keys', 'show', 'relayer']) };
+  } catch {
+    sh('stellar', ['keys', 'generate', 'relayer', '--network', NETWORK, '--fund']);
+    relayer = { pub: sh('stellar', ['keys', 'address', 'relayer']), sec: sh('stellar', ['keys', 'show', 'relayer']) };
+  }
+  console.log('  Relayer:', relayer.pub);
+
   const deployment = {
     poolContractId,
     usdcTokenId,
     adminPublicKey: org.pub,
     adminSecret: org.sec, // testnet-only throwaway key, for the one-click demo
+    relayerPublicKey: relayer.pub,
+    relayerSecret: relayer.sec,
     network: NETWORK,
   };
   const out = path.join(ROOT, 'app/public/deployment.json');

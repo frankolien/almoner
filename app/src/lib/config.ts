@@ -13,6 +13,8 @@ export interface Deployment {
   usdcTokenId: string;
   adminPublicKey?: string;
   adminSecret?: string; // testnet-only convenience for the demo org account
+  relayerPublicKey?: string;
+  relayerSecret?: string; // pays fees + sponsors fresh accounts (server-side in prod)
   programId?: number;
 }
 

@@ -32,9 +32,8 @@ import {
   spentNullifiers,
   poolBalance,
   usdcBalance,
-  fundWithFriendbot,
-  createFundedAccount,
-  addUsdcTrustline,
+  xlmBalance,
+  sponsorFreshAccount,
 } from '../app/src/lib/pool.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,6 +44,7 @@ const dep = JSON.parse(fs.readFileSync(path.join(ROOT, 'app/public/deployment.js
 const POOL = dep.poolContractId as string;
 const TOKEN = dep.usdcTokenId as string;
 const org = Keypair.fromSecret(dep.adminSecret as string);
+const relayer = Keypair.fromSecret((dep.relayerSecret ?? dep.adminSecret) as string);
 
 // program parameters
 const REGION = 963n;
@@ -94,17 +94,11 @@ async function main(): Promise<void> {
   console.log(`   ✓ pool balance ${usdc(await poolBalance(POOL, org))} USDC`);
 
   // 3) A beneficiary creates a FRESH wallet (unlinkable) and trusts USDC.
-  console.log('③ Beneficiary spins up a fresh wallet…');
-  let fresh: Keypair;
-  try {
-    fresh = Keypair.random();
-    await fundWithFriendbot(fresh.publicKey());
-  } catch {
-    console.log('   (friendbot unreachable — funding fresh wallet via org fallback)');
-    fresh = await createFundedAccount(org, '5');
-  }
-  await addUsdcTrustline(fresh, org.publicKey());
-  console.log(`   ✓ fresh wallet ${fresh.publicKey().slice(0, 8)}… funded + trustline set`);
+  console.log('③ Relayer sponsors a fresh wallet (zero-gas onboarding)…');
+  const fresh = Keypair.random();
+  await sponsorFreshAccount(relayer, fresh, org.publicKey());
+  const freshXlm = await xlmBalance(fresh.publicKey());
+  console.log(`   ✓ fresh wallet ${fresh.publicKey().slice(0, 8)}… created + USDC trustline, holding ${freshXlm} XLM`);
 
   // 4) Prove eligibility in-process (the browser runs the same WASM).
   console.log('④ Beneficiary proves eligibility (Groth16, in-browser-equivalent)…');
@@ -134,10 +128,10 @@ async function main(): Promise<void> {
     c: Buffer.from(sb.c).toString('hex'),
   };
 
-  // 5) Claim — the proof is the authorization; the fresh wallet just pays the fee.
-  console.log('⑤ Claim: proof verified ON-CHAIN, USDC disbursed…');
+  // 5) Claim — the proof is the authorization; the RELAYER submits + pays the fee.
+  console.log('⑤ Claim: relayer submits, proof verified ON-CHAIN, USDC disbursed…');
   const before = await usdcBalance(org.publicKey(), fresh.publicKey());
-  const tx = await claim(fresh, POOL, {
+  const tx = await claim(relayer, POOL, {
     programId,
     nullifierHashHex,
     recipient: fresh.publicKey(),
@@ -147,12 +141,13 @@ async function main(): Promise<void> {
   const after = await usdcBalance(org.publicKey(), fresh.publicKey());
   console.log(`   ✓ tx ${tx.slice(0, 16)}…`);
   console.log(`   ✓ fresh wallet USDC: ${usdc(before)} -> ${usdc(after)}  (+${usdc(after - before)})`);
+  console.log(`   ✓ beneficiary paid 0 XLM in gas (still holds ${await xlmBalance(fresh.publicKey())} XLM)`);
 
   // 6) Double-claim must be rejected by the per-program nullifier.
   console.log('⑥ Same beneficiary tries to claim again…');
   let rejected = false;
   try {
-    await claim(fresh, POOL, {
+    await claim(relayer, POOL, {
       programId,
       nullifierHashHex,
       recipient: fresh.publicKey(),

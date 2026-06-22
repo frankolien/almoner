@@ -1,17 +1,17 @@
-// Orchestration shared by the three surfaces: register a cohort, prove + claim
-// in-browser, and reconstruct as the auditor. Thin glue over @almoner/lib
+// Orchestration shared by the surfaces. The org registers + funds + issues
+// credentials; the beneficiary claims from a credential with the relayer
+// sponsoring all gas; the auditor reconstructs. Thin glue over @almoner/lib
 // (crypto/proving) and ./pool (the on-chain client validated by scripts/e2e.ts).
 import {
   issueBeneficiary,
   buildCohort,
-  buildClaimInput,
+  buildClaimInputFromPath,
   generateProof,
   reconstruct,
   bytesToField,
   fieldToBytes32,
   proofToSorobanBytes,
   type BeneficiaryRecord,
-  type ProgramPolicy,
   type AuditReport,
 } from '@almoner/lib';
 import { StrKey } from '@stellar/stellar-sdk';
@@ -21,31 +21,32 @@ import {
   fundPool,
   claim,
   spentNullifiers,
-  fundWithFriendbot,
-  createFundedAccount,
-  addUsdcTrustline,
+  sponsorFreshAccount,
   usdcBalance,
+  xlmBalance,
 } from './pool.js';
 import type { Deployment } from './config.js';
 import type { DemoStore, StoredRecord, ProgramMeta } from './store.js';
+import { credToRecord, credToPolicy, type Credential } from './credential.js';
 
-// In-browser proving: snarkjs fetches these from app/public/circuit.
 const WASM_URL = '/circuit/aid_claim.wasm';
 const ZKEY_URL = '/circuit/aid_claim.zkey';
 
-// Fixed demo policy — identity-private, amount standardized per tier.
 export const DEMO = {
   region: 963,
   regionLabel: 'Eligible region (demo cohort)',
   tier: 1,
-  minBirthYear: 2008, // born in/before 2008 => >= 18 in 2026
+  minBirthYear: 2008,
   entitlementBaseUnits: 100_0000000n, // 100 USDC
   cohortSize: 5,
 };
 
 export type Logger = (msg: string, kind?: 'step' | 'ok' | 'err' | 'info') => void;
+const hex = (u: Uint8Array) => Buffer.from(u).toString('hex');
 
 export const orgKeypair = (d: Deployment): Keypair => Keypair.fromSecret(d.adminSecret!);
+export const relayerKeypair = (d: Deployment): Keypair =>
+  Keypair.fromSecret((d.relayerSecret ?? d.adminSecret)!);
 
 const NAMES = ['Amara', 'Bilal', 'Carmen', 'Dawit', 'Esra', 'Farid', 'Gita', 'Hassan'];
 
@@ -75,30 +76,25 @@ function storeRecord(r: BeneficiaryRecord, name: string): StoredRecord {
 }
 
 function freshProgramId(): number {
-  // small u32, unlikely to collide across demo runs
   const a = new Uint32Array(1);
   crypto.getRandomValues(a);
   return 1000 + (a[0] % 9_000_000);
 }
 
 /** Org: issue a cohort, commit the Merkle root on-chain, register the program. */
-export async function registerCohort(
-  store: DemoStore,
-  d: Deployment,
-  log: Logger,
-): Promise<void> {
+export async function registerCohort(store: DemoStore, d: Deployment, log: Logger): Promise<void> {
   log('Issuing beneficiary secrets and computing leaf commitments…', 'step');
   const records: BeneficiaryRecord[] = Array.from({ length: DEMO.cohortSize }, (_, i) =>
     issueBeneficiary({
       regionCode: DEMO.region,
       programTier: DEMO.tier,
-      birthYear: 1980 + i, // all adults
+      birthYear: 1980 + i,
       kycFlag: 1,
       entitlement: DEMO.entitlementBaseUnits,
     }),
   );
   const { root } = await buildCohort(records);
-  const merkleRootHex = Buffer.from(fieldToBytes32(root)).toString('hex');
+  const merkleRootHex = hex(fieldToBytes32(root));
   const programId = freshProgramId();
   log(`Cohort root ${merkleRootHex.slice(0, 16)}… built (${DEMO.cohortSize} beneficiaries)`, 'info');
 
@@ -126,16 +122,11 @@ export async function registerCohort(
     createdOnChain: true,
     claims: [],
   });
-  log('Program registered. Cohort is now eligible to claim.', 'ok');
+  log('Program registered. Issue claim credentials to your beneficiaries.', 'ok');
 }
 
 /** Org/donor: fund the USDC pool. */
-export async function fundProgram(
-  store: DemoStore,
-  d: Deployment,
-  usdcWhole: number,
-  log: Logger,
-): Promise<void> {
+export async function fundProgram(store: DemoStore, d: Deployment, usdcWhole: number, log: Logger): Promise<void> {
   const amount = BigInt(Math.round(usdcWhole * 1e7));
   log(`Funding pool with ${usdcWhole} USDC…`, 'step');
   await fundPool(orgKeypair(d), d.poolContractId, orgKeypair(d).publicKey(), amount);
@@ -151,84 +142,49 @@ export interface ClaimResult {
   usdcReceived: bigint;
 }
 
-/** Beneficiary: prove eligibility in-browser and claim to a fresh wallet. */
-export async function proveAndClaim(
-  store: DemoStore,
-  d: Deployment,
-  index: number,
-  log: Logger,
-): Promise<ClaimResult> {
-  const s = store.state;
-  if (!s.program) throw new Error('no program registered yet');
-  const records = s.records.map(toRecord);
-
-  log('Spinning up a fresh, unlinkable wallet…', 'step');
-  let fresh: Keypair;
-  try {
-    fresh = Keypair.random();
-    await fundWithFriendbot(fresh.publicKey());
-  } catch {
-    log('Friendbot unreachable — funding fresh wallet via org fallback.', 'info');
-    fresh = await createFundedAccount(orgKeypair(d), '5');
-  }
-  await addUsdcTrustline(fresh, orgKeypair(d).publicKey());
-  log(`Fresh wallet ${fresh.publicKey().slice(0, 10)}… ready`, 'info');
-
-  log('Generating Groth16 proof locally (nothing leaves this browser)…', 'step');
-  const recipientField = bytesToField(new Uint8Array(StrKey.decodeEd25519PublicKey(fresh.publicKey())));
-  const { tree } = await buildCohort(records);
-  const policy: ProgramPolicy = {
-    programId: BigInt(s.program.programId),
-    allowedRegion: BigInt(s.program.allowedRegion),
-    minBirthYear: BigInt(s.program.minBirthYear),
-    requiredTier: BigInt(s.program.requiredTier),
+async function proveFor(cred: Credential, freshPublicKey: string) {
+  const record = credToRecord(cred);
+  const policy = credToPolicy(cred);
+  const recipientField = bytesToField(new Uint8Array(StrKey.decodeEd25519PublicKey(freshPublicKey)));
+  const path = {
+    pathElements: cred.path.pathElements.map(BigInt),
+    pathIndices: cred.path.pathIndices.map(BigInt),
+    root: BigInt(cred.path.root),
   };
-  const { input, nullifierHash } = await buildClaimInput({
-    record: records[index],
-    policy,
-    recipientField,
-    tree,
-    leafIndex: index,
-  });
-  const t0 = performance.now();
+  const { input, nullifierHash } = await buildClaimInputFromPath({ record, policy, recipientField, path });
   const { proof } = await generateProof(input, WASM_URL, ZKEY_URL);
-  log(`Proof generated in ${Math.round(performance.now() - t0)}ms`, 'info');
-
-  const nullifierHashHex = Buffer.from(fieldToBytes32(nullifierHash)).toString('hex');
   const sb = proofToSorobanBytes(proof);
-  const proofHex = {
-    a: Buffer.from(sb.a).toString('hex'),
-    b: Buffer.from(sb.b).toString('hex'),
-    c: Buffer.from(sb.c).toString('hex'),
+  return {
+    nullifierHashHex: hex(fieldToBytes32(nullifierHash)),
+    proofHex: { a: hex(sb.a), b: hex(sb.b), c: hex(sb.c) },
   };
+}
 
-  log('Submitting claim — proof verified ON-CHAIN by the Soroban pool…', 'step');
-  const programId = Number(s.program.programId);
-  const txHash = await claim(fresh, d.poolContractId, {
-    programId,
+/** Beneficiary: claim from a credential. The relayer sponsors all gas. */
+export async function claimFromCredential(cred: Credential, d: Deployment, log: Logger): Promise<ClaimResult> {
+  const relayer = relayerKeypair(d);
+  const issuer = d.adminPublicKey!;
+
+  log('Creating a fresh, unlinkable wallet — gas sponsored, you pay nothing…', 'step');
+  const fresh = Keypair.random();
+  await sponsorFreshAccount(relayer, fresh, issuer);
+  log(`Fresh wallet ${fresh.publicKey().slice(0, 10)}… ready (you hold 0 XLM).`, 'info');
+
+  log('Generating your Groth16 proof on this device…', 'step');
+  const t0 = performance.now();
+  const { nullifierHashHex, proofHex } = await proveFor(cred, fresh.publicKey());
+  log(`Proof generated in ${Math.round(performance.now() - t0)}ms — your secret never left this device.`, 'info');
+
+  log('Submitting — proof verified on-chain by the Soroban pool…', 'step');
+  const txHash = await claim(relayer, d.poolContractId, {
+    programId: cred.programId,
     nullifierHashHex,
     recipient: fresh.publicKey(),
-    payoutAmount: BigInt(s.program.entitlement),
+    payoutAmount: BigInt(cred.entitlement),
     proof: proofHex,
   });
-  const usdcReceived = await usdcBalance(orgKeypair(d).publicKey(), fresh.publicKey());
-  log(`USDC delivered to the fresh wallet. tx ${txHash.slice(0, 12)}…`, 'ok');
-
-  store.update((st) => ({
-    ...st,
-    claims: [
-      ...st.claims.filter((c) => c.leafIndex !== index),
-      {
-        leafIndex: index,
-        nullifierHash: nullifierHashHex,
-        recipient: fresh.publicKey(),
-        recipientSecret: fresh.secret(),
-        amount: s.program!.entitlement,
-        txHash,
-        at: Date.now(),
-      },
-    ],
-  }));
+  const usdcReceived = await usdcBalance(issuer, fresh.publicKey());
+  log('USDC delivered to your fresh wallet.', 'ok');
 
   return {
     freshPublicKey: fresh.publicKey(),
@@ -239,65 +195,32 @@ export async function proveAndClaim(
   };
 }
 
-/** Beneficiary: attempt a second claim (must be rejected by the nullifier). */
-export async function attemptDoubleClaim(
-  store: DemoStore,
-  d: Deployment,
-  index: number,
-  log: Logger,
-): Promise<boolean> {
-  const s = store.state;
-  const claimRec = s.claims.find((c) => c.leafIndex === index);
-  if (!s.program || !claimRec) throw new Error('this beneficiary has not claimed yet');
-  const records = s.records.map(toRecord);
-  const { tree } = await buildCohort(records);
-
-  // Re-prove to a brand-new wallet — even a fresh address cannot reuse the nullifier.
-  const fresh = await (async () => {
-    try {
-      const k = Keypair.random();
-      await fundWithFriendbot(k.publicKey());
-      return k;
-    } catch {
-      return createFundedAccount(orgKeypair(d), '5');
-    }
-  })();
-  const recipientField = bytesToField(new Uint8Array(StrKey.decodeEd25519PublicKey(fresh.publicKey())));
-  const policy: ProgramPolicy = {
-    programId: BigInt(s.program.programId),
-    allowedRegion: BigInt(s.program.allowedRegion),
-    minBirthYear: BigInt(s.program.minBirthYear),
-    requiredTier: BigInt(s.program.requiredTier),
-  };
-  const { input, nullifierHash } = await buildClaimInput({
-    record: records[index],
-    policy,
-    recipientField,
-    tree,
-    leafIndex: index,
-  });
-  log('Re-proving and submitting a SECOND claim for the same beneficiary…', 'step');
-  const { proof } = await generateProof(input, WASM_URL, ZKEY_URL);
-  const sb = proofToSorobanBytes(proof);
+/** Beneficiary: a second claim from the same credential — must be rejected. */
+export async function reclaimFromCredential(cred: Credential, d: Deployment, log: Logger): Promise<boolean> {
+  const relayer = relayerKeypair(d);
+  const issuer = d.adminPublicKey!;
+  const fresh = Keypair.random();
+  await sponsorFreshAccount(relayer, fresh, issuer);
+  log('Re-proving to a brand-new wallet and trying to claim again…', 'step');
+  const { nullifierHashHex, proofHex } = await proveFor(cred, fresh.publicKey());
   try {
-    await addUsdcTrustline(fresh, orgKeypair(d).publicKey());
-    await claim(fresh, d.poolContractId, {
-      programId: Number(s.program.programId),
-      nullifierHashHex: Buffer.from(fieldToBytes32(nullifierHash)).toString('hex'),
+    await claim(relayer, d.poolContractId, {
+      programId: cred.programId,
+      nullifierHashHex,
       recipient: fresh.publicKey(),
-      payoutAmount: BigInt(s.program.entitlement),
-      proof: {
-        a: Buffer.from(sb.a).toString('hex'),
-        b: Buffer.from(sb.b).toString('hex'),
-        c: Buffer.from(sb.c).toString('hex'),
-      },
+      payoutAmount: BigInt(cred.entitlement),
+      proof: proofHex,
     });
-    log('Unexpected: the second claim was accepted!', 'err');
+    log('Unexpected: the second claim was accepted.', 'err');
     return false;
   } catch {
-    log("Rejected: same nullifier, already spent. “We don't know who you are, but you already claimed.”", 'ok');
+    log("Rejected — same nullifier, already spent. “We don’t know who you are, but you already claimed.”", 'ok');
     return true;
   }
+}
+
+export async function freshXlm(pk: string): Promise<number> {
+  return xlmBalance(pk);
 }
 
 /** Auditor: reconstruct who claimed from the on-chain spent set + registration table. */

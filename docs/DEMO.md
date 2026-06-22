@@ -12,24 +12,28 @@ Run `npm run dev` and open the three-surface UI, with a Stellar testnet explorer
 > "Stellar already disburses real aid — UNHCR, the Marshall Islands UBI, Bermuda. But every payout is
 > permanently public. For a refugee, that's a safety risk."
 
-Click **Register cohort + post root on-chain**. A cohort of 5 beneficiaries is issued, the Merkle root
-is committed on Soroban, and the registration table appears. Click **Fund pool**.
+On the **Org console**, click **Register cohort + post root on-chain** (5 beneficiaries, root committed
+on Soroban) and **Fund pool**. Click **Issue claim link** on a beneficiary → a **QR voucher** appears.
 
-### 2 · The magic (40s) — Beneficiary tab
+> "The org hands each beneficiary a credential — a QR at a registration center, a card, or an SMS. It
+> carries everything she needs to prove, and nothing that identifies her on-chain."
 
-Pick a beneficiary, click **Prove eligibility & claim**. Narrate as the log streams:
+### 2 · The magic (40s) — Claim app (open the link / scan the QR)
 
-> "The proof generates locally — the secret never leaves this browser. One Groth16 proof attests cohort
-> membership and four conditions: region, age over 18, tier, and KYC."
+Click **Open claim app** (in the demo; in the field she scans the QR on her phone). A clean claim
+screen: *"Carmen, you qualify for 100 USDC."* Tap **Claim my aid** and narrate the log:
 
-USDC lands in a fresh wallet. Open the explorer on the claim tx:
+> "The proof generates on her device — her secret never leaves it. A fresh wallet is created with gas
+> sponsored by a relayer: **she holds zero XLM and pays nothing.** USDC lands."
 
-> "Cut to the public ledger: no identity, just a hash and a payout to a brand-new address. **We never
-> saw their identity, not even once.**"
+Open the explorer on the claim tx:
 
-### 3 · Anti-fraud (25s) — Beneficiary tab
+> "The public ledger shows only a hash and a payout to a brand-new address. **We never saw her
+> identity, not even once** — and she needed no crypto, no wallet, no fees."
 
-Click **Try to claim again**. The contract rejects it.
+### 3 · Anti-fraud (25s) — Claim app
+
+Click **Try to claim again** — it re-proves to a brand-new wallet and the contract still rejects it.
 
 > "The per-program nullifier recomputes to the same hash, which is already spent. **We don't know who
 > you are, but we know you already claimed.** That kills the duplicate- and ghost-beneficiary fraud

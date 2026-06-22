@@ -29,6 +29,14 @@ export interface BuildClaimArgs {
   leafIndex: number;
 }
 
+// A Merkle authentication path (bundled into a credential so the beneficiary
+// can prove without holding the whole tree).
+export interface ClaimPath {
+  pathElements: FieldLike[];
+  pathIndices: FieldLike[];
+  root: FieldLike;
+}
+
 // Assemble the full witness input for one claim. Every value is reduced to a
 // decimal string, which is what snarkjs expects.
 export async function buildClaimInput(
@@ -36,6 +44,22 @@ export async function buildClaimInput(
 ): Promise<{ input: CircuitInput; nullifierHash: bigint }> {
   const { record, policy, recipientField, tree, leafIndex } = args;
   const { pathElements, pathIndices } = tree.proof(leafIndex);
+  return buildClaimInputFromPath({
+    record,
+    policy,
+    recipientField,
+    path: { pathElements, pathIndices, root: tree.root() },
+  });
+}
+
+// Same, but from a precomputed path — the credential-driven beneficiary flow.
+export async function buildClaimInputFromPath(args: {
+  record: BeneficiaryRecord;
+  policy: ProgramPolicy;
+  recipientField: FieldLike;
+  path: ClaimPath;
+}): Promise<{ input: CircuitInput; nullifierHash: bigint }> {
+  const { record, policy, recipientField, path } = args;
   const nh = await nullifierHash(record.nullifier, policy.programId);
 
   const raw: Record<string, FieldLike | FieldLike[]> = {
@@ -47,10 +71,10 @@ export async function buildClaimInput(
     birthYear: record.birthYear,
     kycFlag: record.kycFlag,
     entitlement: record.entitlement,
-    pathElements,
-    pathIndices,
+    pathElements: path.pathElements,
+    pathIndices: path.pathIndices,
     // public inputs
-    merkleRoot: tree.root(),
+    merkleRoot: path.root,
     programId: policy.programId,
     nullifierHash: nh,
     recipient: recipientField,

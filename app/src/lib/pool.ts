@@ -176,6 +176,13 @@ export async function poolBalance(contractId: string, kp: Keypair): Promise<bigi
   });
 }
 
+export async function getProgram(contractId: string, kp: Keypair, programId: number) {
+  return withRetry('get_program', async () => {
+    const c = poolClient(contractId, kp);
+    return (await c.get_program({ program_id: programId })).result;
+  });
+}
+
 // --------------------- token / classic helpers --------------------
 
 export async function fundWithFriendbot(publicKey: string): Promise<void> {
@@ -209,6 +216,51 @@ export async function createFundedAccount(funder: Keypair, startingXlm = '5'): P
     await pollTx(server, sent.hash);
   });
   return kp;
+}
+
+/**
+ * Real-deployment zero-gas onboarding: a RELAYER creates the beneficiary's
+ * fresh account and its USDC trustline using Stellar **sponsored reserves**, so
+ * the beneficiary holds no XLM and never needs to acquire crypto. The relayer
+ * pays the fee and the base reserves; the fresh account only co-signs to
+ * authorize its own trustline. In production the relayer is a server-side
+ * service; here it is a funded relayer keypair.
+ */
+export async function sponsorFreshAccount(
+  relayer: Keypair,
+  fresh: Keypair,
+  issuer: string,
+): Promise<void> {
+  return withRetry('sponsorFresh', async () => {
+    const server = rpcServer();
+    const relayerAccount = await server.getAccount(relayer.publicKey());
+    const usdc = new Asset('USDC', issuer);
+    const tx = new TransactionBuilder(relayerAccount, {
+      fee: String(Number(BASE_FEE) * 20),
+      networkPassphrase: NETWORK.networkPassphrase,
+    })
+      .addOperation(Operation.beginSponsoringFutureReserves({ sponsoredId: fresh.publicKey() }))
+      .addOperation(Operation.createAccount({ destination: fresh.publicKey(), startingBalance: '0' }))
+      .addOperation(Operation.changeTrust({ asset: usdc, source: fresh.publicKey() }))
+      .addOperation(Operation.endSponsoringFutureReserves({ source: fresh.publicKey() }))
+      .setTimeout(120)
+      .build();
+    tx.sign(relayer, fresh); // relayer: fee + reserves; fresh: authorizes its trustline
+    const sent = await server.sendTransaction(tx);
+    await pollTx(server, sent.hash);
+  });
+}
+
+/** XLM balance (stroops as a decimal string is returned by Horizon as native). */
+export async function xlmBalance(accountId: string): Promise<number> {
+  return withRetry('xlmBalance', async () => {
+    const r = await fetch(`${NETWORK.horizonUrl}/accounts/${accountId}`);
+    if (r.status === 404) return 0;
+    if (!r.ok) throw new Error(`horizon ${r.status}`);
+    const j = (await r.json()) as { balances?: { asset_type: string; balance: string }[] };
+    const native = (j.balances ?? []).find((b) => b.asset_type === 'native');
+    return native ? parseFloat(native.balance) : 0;
+  });
 }
 
 /** A fresh classic account must trust the USDC asset before it can receive it. */

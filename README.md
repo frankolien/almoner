@@ -95,6 +95,38 @@ by the nullifier — reproduce it with `npm run demo:e2e`.
 
 ---
 
+## How real users use it
+
+Almoner is built so a **non-crypto beneficiary** can receive aid with no wallet, no seed phrase, and
+no gas. Three surfaces, three roles:
+
+- **Org console** (operator) — import the already-vetted cohort, post the root, fund the pool, and
+  **issue each beneficiary a claim credential** (a QR / link / printed voucher).
+- **Claim app** (beneficiary) — opens the credential link on any phone. Taps "Claim my aid." The proof
+  generates on-device, a fresh wallet is created, and USDC lands — then they cash out at a Stellar
+  anchor. *(In the repo: the standalone `#claim=<credential>` route.)*
+- **Auditor dashboard** (donor) — reconstructs who claimed and the total through the registration table.
+
+Two decisions make it usable by anyone:
+
+1. **A credential, not a wallet.** The voucher (`app/src/lib/credential.ts`) is self-contained — it
+   carries the secret, attributes, and Merkle path, so the beneficiary proves from any device with
+   nothing else. Lose it → the org re-issues from the registration table.
+2. **Zero-gas via a relayer + Stellar sponsored reserves.** Because the proof *is* the authorization
+   (no beneficiary signature), a **relayer** sponsors the fresh account, the USDC trustline, and the
+   claim fee (`sponsorFreshAccount` in `app/src/lib/pool.ts`). The beneficiary holds **0 XLM** and the
+   relayer can't deanonymize them — it only ever sees a valid proof + a fresh address.
+
+**Cash-out** happens through existing Stellar anchors (the same MoneyGram / local-agent off-ramps UNHCR
+Aid Assist already uses). KYC at the anchor is a private, compliant disclosure — never a public-ledger
+record linking the beneficiary to the aid program.
+
+**What's deliberately off-code in v1** (documented, not hidden): the org account is a single testnet
+key (production: multisig / HSM treasury); the relayer key lives in the browser for the demo
+(production: a server-side relayer service); anchor cash-out is referenced, not integrated.
+
+---
+
 ## Repository layout
 
 ```

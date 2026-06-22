@@ -164,3 +164,38 @@ loud — this is identity privacy, not amount-hiding.
   `aid_claim.vkey.json` (verification key).
 - **Resilience:** `app/src/lib/pool.ts` wraps every RPC op in `withRetry`; all failures occur during
   simulate/assemble (pre-submission), so retries are safe.
+
+---
+
+## 7. Real-deployment UX (zero-crypto beneficiary)
+
+Three role-scoped surfaces, routed by hash in `App.tsx`: **Org console** + **Auditor** (`#app` / `#audit`)
+and a standalone **Claim app** (`#claim=<credential>`).
+
+### Bearer credential (`app/src/lib/credential.ts`)
+
+The org issues each beneficiary a self-contained voucher — `{ secret, nullifier, attributes, policy,
+programId, Merkle path }` encoded base64url into a `#claim=` URL (rendered as a QR). It carries
+everything needed to prove, so the beneficiary claims from any device with nothing else installed;
+`buildClaimInputFromPath` lets the prover run from the bundled path without the full tree. Whoever holds
+the credential can claim **once** (the nullifier enforces it) — exactly a cash-voucher trust model.
+
+### Zero-gas via relayer + sponsored reserves (`sponsorFreshAccount`)
+
+Because the proof *is* the authorization (no beneficiary `require_auth`), a **relayer** submits and pays.
+For onboarding it wraps the fresh account in Stellar **sponsored reserves**:
+
+```
+beginSponsoringFutureReserves(fresh) · createAccount(fresh, 0) ·
+changeTrust(USDC)[fresh signs] · endSponsoringFutureReserves[fresh signs]
+```
+
+The relayer pays the fee + base reserves; the fresh account only co-signs to authorize its own
+trustline. The beneficiary ends up with a funded, trustline-ready wallet holding **0 XLM**, having paid
+nothing. The relayer sees only a valid proof + a fresh address, so it can't deanonymize anyone. Validated
+end-to-end on testnet by `scripts/e2e.ts` and in a real browser by `scripts/browser-claim.ts`.
+
+### Off-code in v1 (documented limits)
+
+Org account = single testnet key (prod: multisig / HSM); relayer key in-browser for the demo (prod:
+server-side relayer service); anchor cash-out referenced, not integrated.
