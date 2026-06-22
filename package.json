@@ -1,0 +1,34 @@
+{
+  "name": "almoner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Confidential, auditable aid disbursement on Stellar, powered by zero-knowledge proofs.",
+  "license": "MIT",
+  "workspaces": [
+    "lib",
+    "circuits",
+    "app"
+  ],
+  "scripts": {
+    "circuit:build": "npm run build --workspace circuits",
+    "gen:vk": "tsx scripts/gen-vk.ts",
+    "contracts:build": "cargo +nightly build --release --manifest-path contracts/Cargo.toml --target wasm32v1-none -Zbuild-std=core,alloc,panic_abort",
+    "contracts:test": "cargo +nightly test --manifest-path contracts/Cargo.toml",
+    "lib:test": "tsx lib/test/selftest.ts",
+    "typecheck": "tsc -p lib/tsconfig.json && tsc -p app/tsconfig.json",
+    "dev": "npm run dev --workspace app",
+    "build": "npm run build --workspace app",
+    "deploy:testnet": "tsx scripts/deploy.ts",
+    "demo:e2e": "tsx scripts/e2e.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
+  }
+}

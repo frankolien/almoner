@@ -1,0 +1,16 @@
+{
+  "name": "@almoner/circuits",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Almoner aid_claim Groth16 circuit (BN254) + trusted setup tooling",
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "info": "snarkjs r1cs info build/aid_claim.r1cs"
+  },
+  "dependencies": {
+    "circomlib": "2.0.5"
+  },
+  "devDependencies": {
+    "snarkjs": "0.7.5"
+  }
+}

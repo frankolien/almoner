@@ -1,0 +1,17 @@
+[package]
+name = "almoner-pool"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+# hazmat-address: lets the contract extract a recipient's ed25519 key to bind
+# the proof to the actual payout address (anti-front-running).
+soroban-sdk = { workspace = true, features = ["hazmat-address"] }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils", "hazmat-address"] }
