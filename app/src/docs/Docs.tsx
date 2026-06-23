@@ -1,7 +1,14 @@
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import './docs.css';
-import { Logo, IconArrow } from '../landing/icons.js';
+import { Logo, IconArrow, IconCopy, IconCheck, IconSearch } from '../landing/icons.js';
 import { SECTIONS, GROUPS, GITHUB_URL } from './content.js';
+
+const LAST_UPDATED = 'June 2026';
+
+interface Heading {
+  id: string;
+  text: string;
+}
 
 export default function Docs({
   route,
@@ -18,15 +25,80 @@ export default function Docs({
   const prev = idx > 0 ? SECTIONS[idx - 1] : null;
   const next = idx < SECTIONS.length - 1 ? SECTIONS[idx + 1] : null;
 
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [headings, setHeadings] = useState<Heading[]>([]);
+  const [activeId, setActiveId] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [helpful, setHelpful] = useState<null | boolean>(null);
+  const [query, setQuery] = useState('');
+
   const go = (s: string) => {
     window.location.hash = `docs/${s}`;
   };
 
   useEffect(() => {
-    const el = document.querySelector('.doc-main');
-    if (el) el.scrollTop = 0;
-    else window.scrollTo(0, 0);
+    window.scrollTo(0, 0);
+    setCopied(false);
+    setHelpful(null);
   }, [slug]);
+
+  // Build the "On this page" rail from the rendered headings, assigning ids.
+  useEffect(() => {
+    const root = bodyRef.current;
+    if (!root) return;
+    const seen = new Set<string>();
+    const found: Heading[] = Array.from(root.querySelectorAll('h3')).map((h) => {
+      const text = h.textContent ?? '';
+      let id = text.toLowerCase().replace(/[^\w]+/g, '-').replace(/(^-|-$)/g, '') || 'section';
+      while (seen.has(id)) id += '-x';
+      seen.add(id);
+      h.id = id;
+      return { id, text };
+    });
+    setHeadings(found);
+    setActiveId(found[0]?.id ?? 'top');
+  }, [slug]);
+
+  // Scroll-spy — the active heading is the last one whose top has passed under
+  // the header. Position-based (not IntersectionObserver) so it stays correct
+  // when you jump via the rail or scroll past every heading.
+  useEffect(() => {
+    if (!headings.length) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      let current = headings[0].id;
+      for (const h of headings) {
+        const el = document.getElementById(h.id);
+        if (el && el.getBoundingClientRect().top <= 96) current = h.id;
+      }
+      setActiveId(current);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [headings]);
+
+  const onPage: Heading[] = headings.length ? headings : [{ id: 'top', text: 'Overview' }];
+
+  const goHeading = (id: string) => {
+    const el = id === 'top' ? bodyRef.current : document.getElementById(id);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setActiveId(id);
+  };
+
+  const copyPage = () => {
+    const md = `# ${section.title}\n\n${section.lede ?? ''}\n\n${bodyRef.current?.innerText ?? ''}`.trim();
+    navigator.clipboard?.writeText(md);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+  };
 
   const nav = useMemo(
     () =>
@@ -36,6 +108,10 @@ export default function Docs({
       })),
     [],
   );
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? nav.map((n) => ({ ...n, items: n.items.filter((s) => s.title.toLowerCase().includes(q)) })).filter((n) => n.items.length)
+    : nav;
 
   return (
     <div className="docs">
@@ -56,7 +132,17 @@ export default function Docs({
 
       <div className="doc-shell">
         <aside className="doc-side">
-          {nav.map(({ group, items }) => (
+          <div className="doc-search">
+            <IconSearch size={15} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search docs"
+              spellCheck={false}
+            />
+            <span className="doc-search-k">⌘K</span>
+          </div>
+          {filtered.map(({ group, items }) => (
             <div className="doc-side-group" key={group}>
               <div className="doc-side-h">{group}</div>
               {items.map((s) => (
@@ -70,14 +156,21 @@ export default function Docs({
               ))}
             </div>
           ))}
+          {!filtered.length && <div className="doc-side-empty">No matches</div>}
         </aside>
 
         <main className="doc-main">
           <article className="doc-article">
             <div className="doc-eyebrow">{section.group}</div>
-            <h1>{section.title}</h1>
+            <div className="doc-title-row">
+              <h1>{section.title}</h1>
+              <button className="doc-copy" onClick={copyPage} aria-label="Copy page as Markdown">
+                {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
+                {copied ? 'Copied' : 'Copy page'}
+              </button>
+            </div>
             {section.lede && <p className="doc-lede">{section.lede}</p>}
-            <div className="doc-body">{section.body()}</div>
+            <div className="doc-body" ref={bodyRef}>{section.body()}</div>
 
             <nav className="doc-pager">
               {prev ? (
@@ -95,8 +188,38 @@ export default function Docs({
                 </button>
               )}
             </nav>
+
+            <footer className="doc-foot">
+              <div className="doc-helpful">
+                {helpful === null ? (
+                  <>
+                    <span>Was this helpful?</span>
+                    <button onClick={() => setHelpful(true)} aria-label="Yes">👍</button>
+                    <button onClick={() => setHelpful(false)} aria-label="No">👎</button>
+                  </>
+                ) : (
+                  <span className="doc-helpful-thanks">Thanks for the feedback.</span>
+                )}
+              </div>
+              <div className="doc-updated">Last updated {LAST_UPDATED}</div>
+            </footer>
           </article>
         </main>
+
+        <aside className="doc-toc">
+          <div className="doc-toc-h">On this page</div>
+          <nav>
+            {onPage.map((h) => (
+              <button
+                key={h.id}
+                className={`doc-toc-item ${activeId === h.id ? 'active' : ''}`}
+                onClick={() => goHeading(h.id)}
+              >
+                {h.text}
+              </button>
+            ))}
+          </nav>
+        </aside>
       </div>
     </div>
   );

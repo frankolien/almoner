@@ -2,8 +2,11 @@
 // chain-signing operation goes through the server (relayer + operator). The
 // privacy-critical proof is still generated on-device and only posted here.
 import type { ProofHex } from './pool.js';
+import { API_BASE } from './config.js';
 
-const API = '/api';
+// In dev/same-origin this is `/api` (Vite proxy → backend). In a split deploy
+// it's `https://<backend>/api` (Vercel frontend → Railway backend).
+const API = `${API_BASE}/api`;
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const r = await fetch(API + path, {

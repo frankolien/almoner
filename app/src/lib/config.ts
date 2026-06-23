@@ -8,6 +8,15 @@ export const NETWORK = {
   explorer: 'https://stellar.expert/explorer/testnet',
 } as const;
 
+// Origin of the backend (relayer + operator API). Empty in local dev and on the
+// server itself → same-origin, so the Vite dev proxy handles `/api`. In a split
+// deploy (frontend on Vercel, backend on Railway) set `VITE_API_BASE` to the
+// Railway URL (e.g. https://almoner.up.railway.app, no trailing slash) and the
+// browser calls it directly (CORS is enabled server-side). The `import.meta`
+// guard keeps this safe when the Node backend imports this module via pool.ts.
+export const API_BASE: string =
+  (typeof import.meta !== 'undefined' && (import.meta as { env?: Record<string, string> }).env?.VITE_API_BASE) || '';
+
 export interface Deployment {
   poolContractId: string;
   usdcTokenId: string;
@@ -22,7 +31,7 @@ export interface Deployment {
 // backend isn't running (read-only display only; signing needs the server).
 export async function loadDeployment(): Promise<Deployment | null> {
   try {
-    const res = await fetch('/api/config', { cache: 'no-store' });
+    const res = await fetch(`${API_BASE}/api/config`, { cache: 'no-store' });
     if (res.ok) return (await res.json()) as Deployment;
   } catch {
     /* backend not up — fall through */

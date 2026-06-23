@@ -43,7 +43,9 @@ const relayer = Keypair.fromSecret(env('RELAYER_SECRET'));
 const AUDITOR_PUBLIC_KEY = process.env.AUDITOR_PUBLIC_KEY ?? '';
 const AUDITOR_SECRET = process.env.AUDITOR_SECRET ?? '';
 const NETWORK = process.env.NETWORK ?? 'testnet';
-const PORT = Number(process.env.RELAYER_PORT ?? 8787);
+// Railway (and most PaaS) inject the public port as $PORT; fall back to
+// RELAYER_PORT for local dev, then 8787.
+const PORT = Number(process.env.PORT ?? process.env.RELAYER_PORT ?? 8787);
 // Optional operator gate for the privileged org endpoints. If set, callers must
 // send `x-operator-key`. (Production: real RBAC + operator wallet auth.)
 const OPERATOR_KEY = process.env.OPERATOR_KEY ?? '';
@@ -140,5 +142,5 @@ app.get('/api/balance/:account', async (c) => {
 });
 
 serve({ fetch: app.fetch, port: PORT }, (info) =>
-  console.log(`▸ Almoner relayer + operator API on http://localhost:${info.port}  (pool ${POOL.slice(0, 8)}…)`),
+  console.log(`▸ Almoner relayer + operator API listening on :${info.port}  (pool ${POOL.slice(0, 8)}…)`),
 );

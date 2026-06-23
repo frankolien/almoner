@@ -1,5 +1,4 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import QRCode from 'qrcode';
 import { buildCohort } from '@almoner/lib';
 import type { DemoStore } from '../lib/store.js';
 import type { Deployment } from '../lib/config.js';
@@ -64,14 +63,8 @@ export default function OrgAdmin({ store, deployment }: { store: DemoStore; depl
       deployment.auditorPublicKey ?? '',
     );
     const url = credentialUrl(cred);
-    const qr = await QRCode.toDataURL(url, {
-      margin: 1,
-      width: 320,
-      errorCorrectionLevel: 'L',
-      color: { dark: '#0d0909', light: '#f2eeec' },
-    });
     setIssued((s) => new Set(s).add(index));
-    setDrawer({ index, name: state.records[index].name, url, qr });
+    setDrawer({ index, name: state.records[index].name, url });
   }
 
   const rows = state.records

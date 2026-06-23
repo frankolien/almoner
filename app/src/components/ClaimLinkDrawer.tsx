@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { IconCopy, IconCheck, IconArrow } from '../landing/icons.js';
+import QRCanvas from './QRCanvas.js';
 
 export interface ActiveCred {
   index: number;
   name: string;
   url: string;
-  qr: string;
 }
 
 export default function ClaimLinkDrawer({ cred, onClose }: { cred: ActiveCred | null; onClose: () => void }) {
@@ -36,7 +36,7 @@ export default function ClaimLinkDrawer({ cred, onClose }: { cred: ActiveCred | 
         </div>
         <div className="drawer-body">
           <div className="qr-frame">
-            <img src={cred.qr} width={224} height={224} alt="claim QR" style={{ borderRadius: 10, display: 'block' }} />
+            <QRCanvas url={cred.url} />
           </div>
           <p className="note" style={{ margin: '16px 0' }}>
             {cred.name}’s private aid voucher (recipient #{cred.index}). Deliver it however suits them — a
