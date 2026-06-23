@@ -1,0 +1,12 @@
+# Keep secrets and heavy build artifacts out of the Vercel upload.
+# (The frontend build only needs app/ + lib/ + the root package.json.)
+.git
+node_modules
+**/node_modules
+.env
+.env.local
+.env.*.local
+**/target
+app/dist
+dist
+.github
