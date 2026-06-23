@@ -1,0 +1,31 @@
+# Almoner gitleaks configuration.
+#
+# The default gitleaks ruleset is kept in full (see [extend]). This file only
+# ALLOWLISTS values that look secret to the entropy heuristics but are public by
+# design — Stellar/Soroban testnet identifiers and the donor's *public* view key.
+#
+# Safety: Stellar SECRET seeds start with 'S' and are deliberately NOT matched by
+# any allowlist below, so a real leaked key is still caught. Secrets live only in
+# .env (gitignored); the committed deployment.json holds public values only.
+
+title = "Almoner"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Public Stellar/Soroban identifiers and the public auditor view key"
+regexTarget = "match"
+regexes = [
+  # Stellar public account addresses (G…) and Soroban contract IDs (C…), 56 chars
+  # base32. Secret seeds (S…) are intentionally excluded.
+  '''[GC][A-Z2-7]{55}''',
+  # Auditor view key — PUBLIC half. Donors/beneficiaries encrypt audit memos to
+  # it; it is baked into every credential and deployment.json. The matching
+  # SECRET key is a different value and is NOT listed here.
+  '''9d8a1027983750fe05df463d6b4ed7187ab29520ac4ce85fe8c9138f7f529a15''',
+]
+paths = [
+  # Public-by-design deployment config (secrets are in .env, never here).
+  '''app/public/deployment\.json''',
+]
