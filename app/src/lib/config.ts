@@ -13,6 +13,7 @@ export interface Deployment {
   usdcTokenId: string;
   adminPublicKey?: string;
   relayerPublicKey?: string;
+  auditorPublicKey?: string;
   network?: string;
 }
 

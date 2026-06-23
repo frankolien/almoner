@@ -6,7 +6,7 @@
 
 use super::*;
 use crate::verifier::Proof;
-use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Address, BytesN, Env};
+use soroban_sdk::{testutils::Address as _, token::StellarAssetClient, Address, Bytes, BytesN, Env};
 
 fn zero_proof(env: &Env) -> Proof {
     Proof {
@@ -78,7 +78,7 @@ fn claim_on_missing_program_errors() {
     let (env, client, _, _) = setup();
     let recipient = Address::generate(&env);
     let nh = BytesN::from_array(&env, &[1u8; 32]);
-    let res = client.try_claim(&99, &nh, &recipient, &100_0000000, &zero_proof(&env));
+    let res = client.try_claim(&99, &nh, &recipient, &100_0000000, &zero_proof(&env), &Bytes::new(&env));
     assert_eq!(res, Err(Ok(Error::NoProgram)));
 }
 
@@ -89,7 +89,7 @@ fn claim_rejects_non_positive_amount() {
     client.create_program(&1, &root, &963, &2008, &1);
     let recipient = Address::generate(&env);
     let nh = BytesN::from_array(&env, &[1u8; 32]);
-    let res = client.try_claim(&1, &nh, &recipient, &0, &zero_proof(&env));
+    let res = client.try_claim(&1, &nh, &recipient, &0, &zero_proof(&env), &Bytes::new(&env));
     assert_eq!(res, Err(Ok(Error::InvalidAmount)));
 }
 

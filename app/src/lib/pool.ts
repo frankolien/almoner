@@ -124,6 +124,7 @@ export interface ClaimArgs {
   recipient: string;
   payoutAmount: bigint;
   proof: ProofHex;
+  memoHex: string; // encrypted audit memo (opaque on-chain; donor view-key decrypts)
 }
 
 /** Submit a claim. The submitter `kp` only pays the fee — the proof authorizes. */
@@ -136,8 +137,18 @@ export async function claim(kp: Keypair, contractId: string, p: ClaimArgs): Prom
       recipient: p.recipient,
       payout_amount: p.payoutAmount,
       proof: proofFromHex(p.proof),
+      memo: hexToBuffer(p.memoHex),
     });
     return txHash(await tx.signAndSend());
+  });
+}
+
+/** The on-chain encrypted audit memos (hex), decryptable only by the donor view key. */
+export async function claimMemos(contractId: string, kp: Keypair, programId: number): Promise<string[]> {
+  return withRetry('claim_memos', async () => {
+    const c = poolClient(contractId, kp);
+    const res = (await c.claim_memos({ program_id: programId })).result;
+    return res.map((b) => bufToHex(b));
   });
 }
 

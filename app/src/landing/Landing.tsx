@@ -1,7 +1,12 @@
 import './landing.css';
 import { Logo, IconArrow } from './icons.js';
+import { GITHUB_URL, DORAHACKS_URL, STELLAR_URL, X_URL } from '../docs/content.js';
 
 export default function Landing({ onLaunch }: { onLaunch: () => void }) {
+  const go = (hash: string) => {
+    window.location.hash = hash;
+    window.scrollTo(0, 0);
+  };
   return (
     <div className="landing">
       {/* moody mountain backdrop */}
@@ -50,7 +55,7 @@ export default function Landing({ onLaunch }: { onLaunch: () => void }) {
           <button className="btn btn-primary btn-lg" onClick={onLaunch}>
             Launch the demo <IconArrow size={17} />
           </button>
-          <a className="btn btn-ghost btn-lg" href="#" onClick={(e) => { e.preventDefault(); onLaunch(); }}>
+          <a className="btn btn-ghost btn-lg" href="#docs/how-it-works" onClick={(e) => { e.preventDefault(); go('docs/how-it-works'); }}>
             How it works
           </a>
         </div>
@@ -62,31 +67,31 @@ export default function Landing({ onLaunch }: { onLaunch: () => void }) {
           <div>
             <h4>Product</h4>
             <span className="fitem" onClick={onLaunch}>Launch app</span>
-            <span className="fitem" onClick={onLaunch}>Org admin</span>
-            <span className="fitem" onClick={onLaunch}>Beneficiary</span>
-            <span className="fitem" onClick={onLaunch}>Auditor</span>
+            <span className="fitem" onClick={() => go('programs')}>Org admin</span>
+            <span className="fitem" onClick={() => go('docs/zero-gas')}>Beneficiary</span>
+            <span className="fitem" onClick={() => go('audit')}>Auditor</span>
           </div>
           <div>
             <h4>Protocol</h4>
-            <span className="fitem">aid_claim circuit</span>
-            <span className="fitem">Soroban pool</span>
-            <span className="fitem">BN254 verifier</span>
-            <span className="fitem">Nullifier set</span>
+            <span className="fitem" onClick={() => go('docs/the-circuit')}>aid_claim circuit</span>
+            <span className="fitem" onClick={() => go('docs/on-chain')}>Soroban pool</span>
+            <span className="fitem" onClick={() => go('docs/on-chain')}>BN254 verifier</span>
+            <span className="fitem" onClick={() => go('docs/nullifiers')}>Nullifier set</span>
           </div>
           <div>
             <h4>Developers</h4>
-            <a href="#">Documentation</a>
-            <a href="#">GitHub</a>
-            <a href="#">Architecture</a>
-            <a href="#">Demo script</a>
+            <span className="fitem" onClick={() => go('docs/introduction')}>Documentation</span>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+            <span className="fitem" onClick={() => go('docs/how-it-works')}>Architecture</span>
+            <span className="fitem" onClick={() => go('docs/quickstart')}>Demo script</span>
           </div>
           <div>
             <h4>Connect</h4>
-            <a href="#">X / Twitter</a>
-            <a href="#">
+            <a href={X_URL} target="_blank" rel="noreferrer">X / Twitter</a>
+            <a href={STELLAR_URL} target="_blank" rel="noreferrer">
               Stellar <span className="soon">testnet</span>
             </a>
-            <a href="#">DoraHacks</a>
+            <a href={DORAHACKS_URL} target="_blank" rel="noreferrer">DoraHacks</a>
           </div>
         </div>
 
@@ -107,9 +112,9 @@ export default function Landing({ onLaunch }: { onLaunch: () => void }) {
             </p>
           </div>
           <div className="ls-footer-legal">
-            <a href="#">Terms</a>
-            <a href="#">Privacy</a>
-            <a href="#">README</a>
+            <span className="fitem" onClick={() => go('docs/introduction')}>Terms</span>
+            <span className="fitem" onClick={() => go('docs/selective-disclosure')}>Privacy</span>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">README</a>
           </div>
         </div>
         <div className="ls-copy">© 2026 Almoner · Stellar Hacks: Real-World ZK</div>

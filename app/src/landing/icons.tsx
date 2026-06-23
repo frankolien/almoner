@@ -41,11 +41,52 @@ export const IconStar = ({ size = 18 }: P) => (
   </svg>
 );
 
+export const IconGrid = ({ size }: P) => (
+  <svg {...base(size)}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+);
+export const IconDoc = ({ size }: P) => (
+  <svg {...base(size)}><path d="M6 2h7l5 5v13a2 2 0 01-2 2H6a2 2 0 01-2-2V4a2 2 0 012-2z" /><path d="M13 2v5h5M8 13h8M8 17h5" /></svg>
+);
+export const IconUsers = ({ size }: P) => (
+  <svg {...base(size)}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0111 0" /><path d="M16 5.2a3.2 3.2 0 010 5.6M17.5 20a5.5 5.5 0 00-2.2-4.4" /></svg>
+);
+export const IconHome = ({ size }: P) => (
+  <svg {...base(size)}><path d="M4 11l8-7 8 7" /><path d="M6 9.5V20h12V9.5" /><path d="M10 20v-5h4v5" /></svg>
+);
+export const IconSearch = ({ size }: P) => (
+  <svg {...base(size)}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></svg>
+);
+export const IconCopy = ({ size }: P) => (
+  <svg {...base(size)}><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15V5a2 2 0 012-2h10" /></svg>
+);
+export const IconQR = ({ size }: P) => (
+  <svg {...base(size)}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3M21 14v7h-7" /></svg>
+);
+export const IconCheck = ({ size }: P) => (
+  <svg {...base(size)}><path d="M4 12l5 5L20 6" /></svg>
+);
+export const IconSend = ({ size }: P) => (
+  <svg {...base(size)}><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+);
+
 export const Logo = ({ size = 26 }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <g stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+    <g
+      className="logo-rays"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+    >
       <path d="M12 3v6M12 15v6M3 12h6M15 12h6M5.6 5.6l4.2 4.2M14.2 14.2l4.2 4.2M18.4 5.6l-4.2 4.2M9.8 14.2l-4.2 4.2" />
     </g>
-    <circle cx="12" cy="12" r="2.4" fill="#ff5c39" />
+    <circle
+      className="logo-core"
+      cx="12"
+      cy="12"
+      r="2.4"
+      fill="#ff6240"
+      style={{ transformBox: 'fill-box', transformOrigin: 'center' }}
+    />
   </svg>
 );

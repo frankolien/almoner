@@ -7,3 +7,4 @@ export * from './commitment.js';
 export * from './registry.js';
 export * from './prover.js';
 export * from './groth16.js';
+export * from './viewkey.js';

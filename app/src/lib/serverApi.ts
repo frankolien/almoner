@@ -29,10 +29,15 @@ export interface ServerConfig {
   usdcTokenId: string;
   adminPublicKey: string;
   relayerPublicKey: string;
+  auditorPublicKey: string;
   network: string;
 }
 
 export const apiConfig = () => get<ServerConfig>('/config');
+
+// Demo-only: the auditor surface fetches its view (secret) key. Production: the
+// donor holds it; it never leaves their device.
+export const apiViewKey = async () => (await get<{ secretKey: string }>('/auditor-viewkey')).secretKey;
 
 export interface CreateProgramBody {
   programId: number;
@@ -53,12 +58,16 @@ export interface ClaimBody {
   recipient: string;
   payoutAmount: bigint;
   proof: ProofHex;
+  memoHex: string;
 }
 export const apiClaim = (b: ClaimBody) =>
   post<{ txHash: string }>('/claim', { ...b, payoutAmount: b.payoutAmount.toString() });
 
 export const apiSpent = async (programId: number): Promise<string[]> =>
   (await get<{ spent: string[] }>(`/spent/${programId}`)).spent;
+
+export const apiMemos = async (programId: number): Promise<string[]> =>
+  (await get<{ memos: string[] }>(`/memos/${programId}`)).memos;
 
 export const apiBalance = async (account: string): Promise<bigint> =>
   BigInt((await get<{ usdc: string }>(`/balance/${account}`)).usdc);

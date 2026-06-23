@@ -6,10 +6,10 @@
   --text: #f2eeec;
   --muted: #a39a98;
   --faint: #6b605f;
-  --accent: #ff5c39;
-  --green: #4ade80;
-  --red: #f5694e;
-  font-family: 'General Sans', ui-sans-serif, system-ui, sans-serif;
+  --accent: #ff6240;
+  --green: #45c98a;
+  --red: #f0664a;
+  font-family: var(--font-sans, 'Geist', ui-sans-serif, system-ui, sans-serif);
   color: var(--text);
   background: var(--bg);
   min-height: 100vh;
@@ -47,7 +47,7 @@
 
 .claim-eyebrow { font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .claim-eyebrow .d { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px 1px rgba(255, 92, 57, 0.8); }
-.claim h1 { font-weight: 600; font-size: clamp(26px, 5vw, 34px); letter-spacing: -0.02em; line-height: 1.1; margin: 16px 0 0; }
+.claim h1 { font-family: var(--display, 'Cabinet Grotesk', sans-serif); font-weight: 700; font-size: clamp(26px, 5vw, 34px); letter-spacing: -0.02em; line-height: 1.1; margin: 16px 0 0; text-wrap: balance; }
 .claim h1 .amt { color: var(--accent); }
 .claim .sub { color: var(--muted); font-size: 15px; line-height: 1.6; margin: 14px 0 0; }
 
@@ -88,3 +88,39 @@
 .claim-err { color: var(--red); font-size: 14px; text-align: center; }
 .claim-back { display: inline-block; margin-top: 22px; color: var(--faint); font-size: 13px; text-decoration: none; cursor: pointer; }
 .claim-back:hover { color: var(--muted); }
+
+/* ── entrance + delight ── */
+.claim-card { animation: claim-card-in 520ms cubic-bezier(.16,1,.3,1) both; }
+@keyframes claim-card-in { from { opacity: 0; transform: translateY(16px) scale(.97); } to { opacity: 1; transform: none; } }
+
+.claim-attr { opacity: 0; animation: claim-attr-in 420ms cubic-bezier(.16,1,.3,1) both; animation-delay: calc(220ms + var(--i, 0) * 90ms); }
+@keyframes claim-attr-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.claim-attr .c { display: inline-grid; place-items: center; width: 16px; height: 16px; }
+.claim-attr .c svg path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: claim-tick 360ms ease-out forwards; animation-delay: calc(360ms + var(--i, 0) * 90ms); }
+@keyframes claim-tick { to { stroke-dashoffset: 0; } }
+
+/* proof ritual */
+.ritual { margin: 22px 0 4px; display: flex; flex-direction: column; gap: 4px; }
+.ritual-step { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 12px; border: 1px solid transparent; transition: background .3s, border-color .3s; }
+.ritual-step.active { background: var(--surface-2); border-color: var(--border); }
+.ritual-dot { width: 24px; height: 24px; border-radius: 50%; flex: none; display: grid; place-items: center; border: 1.5px solid var(--border); color: var(--faint); }
+.ritual-step.done .ritual-dot { background: rgba(69,201,138,.14); border-color: var(--green); color: var(--green); }
+.ritual-step.active .ritual-dot { border-color: var(--accent); color: var(--accent); }
+.ritual-spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent); border-top-color: transparent; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.ritual-label { font-size: 14px; font-weight: 600; color: var(--muted); }
+.ritual-step.active .ritual-label, .ritual-step.done .ritual-label { color: var(--text); }
+.ritual-tick path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: claim-tick 340ms ease-out forwards; }
+
+/* success amount ring */
+.claim-success-ring { width: 88px; height: 88px; margin: 4px auto 14px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle, rgba(69,201,138,.16), transparent 70%); animation: ring-pop 600ms cubic-bezier(.34,1.56,.64,1) both; }
+.claim-success-ring::before { content: ''; position: absolute; width: 88px; height: 88px; border-radius: 50%; border: 2px solid var(--green); opacity: 0; animation: ring-pulse 1.2s ease-out .2s; }
+@keyframes ring-pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes ring-pulse { 0% { transform: scale(.9); opacity: .8; } 100% { transform: scale(1.7); opacity: 0; } }
+
+/* double-claim reject stamp */
+.reject-stamp { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; padding: 9px 16px; border-radius: 10px;
+  background: rgba(240,102,74,.12); color: var(--red); font-weight: 700; font-size: 13px; letter-spacing: .02em;
+  border: 1.5px solid rgba(240,102,74,.5); transform: rotate(-3deg); animation: stamp-slam 420ms cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes stamp-slam { 0% { transform: rotate(-3deg) scale(1.5); opacity: 0; } 60% { opacity: 1; } 100% { transform: rotate(-3deg) scale(1); opacity: 1; } }

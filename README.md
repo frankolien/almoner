@@ -220,9 +220,15 @@ surfaces · live double-claim rejection.
 
 The eligibility **root** and the **USDC movement** are public — only the *link* between a registered
 member and a claim is hidden. Entitlements are standardized per tier, so the public `payoutAmount`
-reveals only a tier shared by many people, never the person. In v1 the "view key" is controlled
-access to the registration table; an optional stronger version encrypts a memo to an auditor public
-key for cryptographic selective disclosure.
+reveals only a tier shared by many people, never the person.
+
+**Cryptographic selective disclosure (implemented).** Each claim posts an audit memo
+(`Poseidon`-free; beneficiary id + amount) **encrypted to the donor's view key** on the public ledger —
+opaque bytes to everyone else (NaCl `box`, X25519). The donor decrypts with their private key and
+reconstructs exactly who was paid **without the org's plaintext registration table** (`lib/viewkey.ts`,
+contract `claim_memos`, auditor "v2" reconstruction). This is SDF's stated direction — proving the data
+to the donor while revealing nothing to the world — and it means the sensitive registration table is no
+longer the only path to an audit.
 
 ## License
 

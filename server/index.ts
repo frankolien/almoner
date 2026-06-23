@@ -19,6 +19,7 @@ import {
   claim,
   sponsorFreshAccount,
   spentNullifiers,
+  claimMemos,
   usdcBalance,
 } from '../app/src/lib/pool.js';
 
@@ -39,6 +40,8 @@ const USDC = env('USDC_TOKEN_ID');
 const ISSUER = env('ADMIN_PUBLIC_KEY');
 const org = Keypair.fromSecret(env('ADMIN_SECRET'));
 const relayer = Keypair.fromSecret(env('RELAYER_SECRET'));
+const AUDITOR_PUBLIC_KEY = process.env.AUDITOR_PUBLIC_KEY ?? '';
+const AUDITOR_SECRET = process.env.AUDITOR_SECRET ?? '';
 const NETWORK = process.env.NETWORK ?? 'testnet';
 const PORT = Number(process.env.RELAYER_PORT ?? 8787);
 // Optional operator gate for the privileged org endpoints. If set, callers must
@@ -61,9 +64,14 @@ app.get('/api/config', (c) =>
     usdcTokenId: USDC,
     adminPublicKey: org.publicKey(),
     relayerPublicKey: relayer.publicKey(),
+    auditorPublicKey: AUDITOR_PUBLIC_KEY, // public — beneficiaries encrypt audit memos to it
     network: NETWORK,
   }),
 );
+
+// Demo-only: hand the auditor surface its view (secret) key. In production the
+// donor/auditor holds this key themselves and it NEVER touches the server.
+app.get('/api/auditor-viewkey', (c) => c.json({ secretKey: AUDITOR_SECRET }));
 
 function requireOperator(c: { req: { header: (k: string) => string | undefined } }): void {
   if (OPERATOR_KEY && c.req.header('x-operator-key') !== OPERATOR_KEY) {
@@ -110,6 +118,7 @@ app.post('/api/claim', async (c) => {
     recipient: String(b.recipient),
     payoutAmount: BigInt(b.payoutAmount),
     proof: b.proof,
+    memoHex: String(b.memoHex ?? ''),
   });
   return c.json({ txHash });
 });
@@ -118,6 +127,11 @@ app.post('/api/claim', async (c) => {
 app.get('/api/spent/:id', async (c) => {
   const s = await spentNullifiers(POOL, org, Number(c.req.param('id')));
   return c.json({ spent: s });
+});
+
+app.get('/api/memos/:id', async (c) => {
+  const memos = await claimMemos(POOL, org, Number(c.req.param('id')));
+  return c.json({ memos });
 });
 
 app.get('/api/balance/:account', async (c) => {

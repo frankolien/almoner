@@ -12,6 +12,7 @@ export interface Credential {
   v: 1;
   programId: number;
   name: string;
+  auditorPublicKey: string; // donor view key (public) — encrypt the audit memo to it
   policy: { allowedRegion: string; minBirthYear: string; requiredTier: string };
   entitlement: string;
   record: {
@@ -49,12 +50,14 @@ export async function buildCredential(
   leafIndex: number,
   tree: PoseidonMerkleTree,
   program: ProgramMeta,
+  auditorPublicKey: string,
 ): Promise<Credential> {
   const { pathElements, pathIndices, root } = tree.proof(leafIndex);
   return {
     v: 1,
     programId: Number(program.programId),
     name: rec.name,
+    auditorPublicKey,
     policy: {
       allowedRegion: program.allowedRegion,
       minBirthYear: program.minBirthYear,

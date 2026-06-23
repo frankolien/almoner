@@ -42,7 +42,7 @@ export const Errors = {
   6: {message:"InvalidAmount"}
 }
 
-export type DataKey = {tag: "Admin", values: void} | {tag: "Token", values: void} | {tag: "Program", values: readonly [u32]} | {tag: "Spent", values: readonly [u32, Buffer]} | {tag: "Nullifiers", values: readonly [u32]};
+export type DataKey = {tag: "Admin", values: void} | {tag: "Token", values: void} | {tag: "Program", values: readonly [u32]} | {tag: "Spent", values: readonly [u32, Buffer]} | {tag: "Nullifiers", values: readonly [u32]} | {tag: "Memos", values: readonly [u32]};
 
 
 /**
@@ -104,7 +104,7 @@ export interface Client {
    * public-signal vector from its own trusted storage, so a prover who used
    * a different root or a lenient policy simply fails verification.
    */
-  claim: ({program_id, nullifier_hash, recipient, payout_amount, proof}: {program_id: u32, nullifier_hash: Buffer, recipient: string, payout_amount: i128, proof: Proof}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
+  claim: ({program_id, nullifier_hash, recipient, payout_amount, proof, memo}: {program_id: u32, nullifier_hash: Buffer, recipient: string, payout_amount: i128, proof: Proof, memo: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<Result<void>>>
 
   /**
    * Construct and simulate a token transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -115,6 +115,13 @@ export interface Client {
    * Construct and simulate a is_spent transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    */
   is_spent: ({program_id, nullifier_hash}: {program_id: u32, nullifier_hash: Buffer}, options?: MethodOptions) => Promise<AssembledTransaction<boolean>>
+
+  /**
+   * Construct and simulate a claim_memos transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * The on-chain encrypted audit memos — each one decryptable only by the
+   * donor's view key, for cryptographic selective disclosure.
+   */
+  claim_memos: ({program_id}: {program_id: u32}, options?: MethodOptions) => Promise<AssembledTransaction<Array<Buffer>>>
 
   /**
    * Construct and simulate a get_program transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
@@ -161,13 +168,14 @@ export class Client extends ContractClient {
   constructor(public readonly options: ContractClientOptions) {
     super(
       new ContractSpec([ "AAAABAAAAAAAAAAAAAAABUVycm9yAAAAAAAABgAAAAAAAAAOTm90SW5pdGlhbGl6ZWQAAAAAAAEAAAAAAAAADVByb2dyYW1FeGlzdHMAAAAAAAACAAAAAAAAAAlOb1Byb2dyYW0AAAAAAAADAAAAAAAAAA5BbHJlYWR5Q2xhaW1lZAAAAAAABAAAAAAAAAAMSW52YWxpZFByb29mAAAABQAAAAAAAAANSW52YWxpZEFtb3VudAAAAAAAAAY=",
-        "AAAAAgAAAAAAAAAAAAAAB0RhdGFLZXkAAAAABQAAAAAAAAAAAAAABUFkbWluAAAAAAAAAAAAAAAAAAAFVG9rZW4AAAAAAAABAAAAAAAAAAdQcm9ncmFtAAAAAAEAAAAEAAAAAQAAAAAAAAAFU3BlbnQAAAAAAAACAAAABAAAA+4AAAAgAAAAAQAAAAAAAAAKTnVsbGlmaWVycwAAAAAAAQAAAAQ=",
+        "AAAAAgAAAAAAAAAAAAAAB0RhdGFLZXkAAAAABgAAAAAAAAAAAAAABUFkbWluAAAAAAAAAAAAAAAAAAAFVG9rZW4AAAAAAAABAAAAAAAAAAdQcm9ncmFtAAAAAAEAAAAEAAAAAQAAAAAAAAAFU3BlbnQAAAAAAAACAAAABAAAA+4AAAAgAAAAAQAAAAAAAAAKTnVsbGlmaWVycwAAAAAAAQAAAAQAAAABAAAAAAAAAAVNZW1vcwAAAAAAAAEAAAAE",
         "AAAAAQAAALZQZXItcHJvZ3JhbSBzdGF0ZTogdGhlIGNvaG9ydCByb290LCB0aGUgcHVibGljIHBvbGljeSBwYXJhbWV0ZXJzLCBhbmQKcnVubmluZyB0b3RhbHMgKHRoZSB0b3RhbHMgYXJlIGNvbnZlbmllbmNlIHZpZXdzIOKAlCB0aGUgYXV0aG9yaXRhdGl2ZSBjbGFpbQpyZWNvcmQgaXMgdGhlIHNwZW50LW51bGxpZmllciBzZXQpLgAAAAAAAAAAAA1Qcm9ncmFtQ29uZmlnAAAAAAAABgAAAAAAAAAOYWxsb3dlZF9yZWdpb24AAAAAAAQAAAAAAAAAC2NsYWltX2NvdW50AAAAAAQAAAAAAAAAC21lcmtsZV9yb290AAAAA+4AAAAgAAAAAAAAAA5taW5fYmlydGhfeWVhcgAAAAAABAAAAAAAAAANcmVxdWlyZWRfdGllcgAAAAAAAAQAAAAAAAAADXRvdGFsX2NsYWltZWQAAAAAAAAL",
         "AAAAAAAAAENGdW5kIHRoZSBVU0RDIHBvb2wuIEFueW9uZSAodHlwaWNhbGx5IHRoZSBkb25vci9vcmcpIG1heSB0b3AgaXQgdXAuAAAAAARmdW5kAAAAAgAAAAAAAAAEZnJvbQAAABMAAAAAAAAABmFtb3VudAAAAAAACwAAAAEAAAPpAAAAAgAAAAM=",
         "AAAAAAAAAAAAAAAFYWRtaW4AAAAAAAAAAAAAAQAAABM=",
-        "AAAAAAAAAzNUaGUgaGVhcnQgb2YgQWxtb25lci4gVmVyaWZ5IGEgYmVuZWZpY2lhcnkncyBHcm90aDE2IHByb29mIGFuZCBkaXNidXJzZS4KClRoZXJlIGlzIGRlbGliZXJhdGVseSAqKm5vIGByZXF1aXJlX2F1dGhgIGZvciB0aGUgYmVuZWZpY2lhcnkqKjogdGhlCnByb29mIGlzIHRoZSBhdXRob3JpemF0aW9uLiBBIHJlbGF5ZXIgb3IgdGhlIGZyZXNoIHJlY2lwaWVudCBhY2NvdW50IGNhbgpzdWJtaXQgaXQsIHNvIHRoZSBiZW5lZmljaWFyeSdzIHJlYWwgaWRlbnRpdHkgbmV2ZXIgc2lnbnMgYW55dGhpbmcuCgpDaGVja3MsIGluIG9yZGVyIChtYXRjaGluZyB0aGUgYXJjaGl0ZWN0dXJlIGRvYyk6CjEuIHN1Ym1pdHRlZCByb290IG1hdGNoZXMgdGhlIHN0b3JlZCByb290IGZvciB0aGUgcHJvZ3JhbQoyLiBwb2xpY3kgcGFyYW1zIGluIHRoZSBwdWJsaWMgc2lnbmFscyBtYXRjaCB0aGUgc3RvcmVkIGNvbmZpZwozLiB0aGUgbnVsbGlmaWVyIGlzIHVudXNlZAo0LiB0aGUgR3JvdGgxNiBwcm9vZiB2ZXJpZmllcyBhZ2FpbnN0IHRoZSBwdWJsaWMgc2lnbmFscwo1LiBtYXJrIHRoZSBudWxsaWZpZXIgc3BlbnQKNi4gdHJhbnNmZXIgdGhlIFVTREMgdG8gdGhlIGZyZXNoIHJlY2lwaWVudAoKQ2hlY2tzIDEgYW5kIDIgYXJlIGVuZm9yY2VkICpieSBjb25zdHJ1Y3Rpb24qOiB0aGUgY29udHJhY3QgYnVpbGRzIHRoZQpwdWJsaWMtc2lnbmFsIHZlY3RvciBmcm9tIGl0cyBvd24gdHJ1c3RlZCBzdG9yYWdlLCBzbyBhIHByb3ZlciB3aG8gdXNlZAphIGRpZmZlcmVudCByb290IG9yIGEgbGVuaWVudCBwb2xpY3kgc2ltcGx5IGZhaWxzIHZlcmlmaWNhdGlvbi4AAAAABWNsYWltAAAAAAAABQAAAAAAAAAKcHJvZ3JhbV9pZAAAAAAABAAAAAAAAAAObnVsbGlmaWVyX2hhc2gAAAAAA+4AAAAgAAAAAAAAAAlyZWNpcGllbnQAAAAAAAATAAAAAAAAAA1wYXlvdXRfYW1vdW50AAAAAAAACwAAAAAAAAAFcHJvb2YAAAAAAAfQAAAABVByb29mAAAAAAAAAQAAA+kAAAACAAAAAw==",
+        "AAAAAAAAAzNUaGUgaGVhcnQgb2YgQWxtb25lci4gVmVyaWZ5IGEgYmVuZWZpY2lhcnkncyBHcm90aDE2IHByb29mIGFuZCBkaXNidXJzZS4KClRoZXJlIGlzIGRlbGliZXJhdGVseSAqKm5vIGByZXF1aXJlX2F1dGhgIGZvciB0aGUgYmVuZWZpY2lhcnkqKjogdGhlCnByb29mIGlzIHRoZSBhdXRob3JpemF0aW9uLiBBIHJlbGF5ZXIgb3IgdGhlIGZyZXNoIHJlY2lwaWVudCBhY2NvdW50IGNhbgpzdWJtaXQgaXQsIHNvIHRoZSBiZW5lZmljaWFyeSdzIHJlYWwgaWRlbnRpdHkgbmV2ZXIgc2lnbnMgYW55dGhpbmcuCgpDaGVja3MsIGluIG9yZGVyIChtYXRjaGluZyB0aGUgYXJjaGl0ZWN0dXJlIGRvYyk6CjEuIHN1Ym1pdHRlZCByb290IG1hdGNoZXMgdGhlIHN0b3JlZCByb290IGZvciB0aGUgcHJvZ3JhbQoyLiBwb2xpY3kgcGFyYW1zIGluIHRoZSBwdWJsaWMgc2lnbmFscyBtYXRjaCB0aGUgc3RvcmVkIGNvbmZpZwozLiB0aGUgbnVsbGlmaWVyIGlzIHVudXNlZAo0LiB0aGUgR3JvdGgxNiBwcm9vZiB2ZXJpZmllcyBhZ2FpbnN0IHRoZSBwdWJsaWMgc2lnbmFscwo1LiBtYXJrIHRoZSBudWxsaWZpZXIgc3BlbnQKNi4gdHJhbnNmZXIgdGhlIFVTREMgdG8gdGhlIGZyZXNoIHJlY2lwaWVudAoKQ2hlY2tzIDEgYW5kIDIgYXJlIGVuZm9yY2VkICpieSBjb25zdHJ1Y3Rpb24qOiB0aGUgY29udHJhY3QgYnVpbGRzIHRoZQpwdWJsaWMtc2lnbmFsIHZlY3RvciBmcm9tIGl0cyBvd24gdHJ1c3RlZCBzdG9yYWdlLCBzbyBhIHByb3ZlciB3aG8gdXNlZAphIGRpZmZlcmVudCByb290IG9yIGEgbGVuaWVudCBwb2xpY3kgc2ltcGx5IGZhaWxzIHZlcmlmaWNhdGlvbi4AAAAABWNsYWltAAAAAAAABgAAAAAAAAAKcHJvZ3JhbV9pZAAAAAAABAAAAAAAAAAObnVsbGlmaWVyX2hhc2gAAAAAA+4AAAAgAAAAAAAAAAlyZWNpcGllbnQAAAAAAAATAAAAAAAAAA1wYXlvdXRfYW1vdW50AAAAAAAACwAAAAAAAAAFcHJvb2YAAAAAAAfQAAAABVByb29mAAAAAAAAAAAAAARtZW1vAAAADgAAAAEAAAPpAAAAAgAAAAM=",
         "AAAAAAAAAAAAAAAFdG9rZW4AAAAAAAAAAAAAAQAAABM=",
         "AAAAAAAAAAAAAAAIaXNfc3BlbnQAAAACAAAAAAAAAApwcm9ncmFtX2lkAAAAAAAEAAAAAAAAAA5udWxsaWZpZXJfaGFzaAAAAAAD7gAAACAAAAABAAAAAQ==",
+        "AAAAAAAAAIFUaGUgb24tY2hhaW4gZW5jcnlwdGVkIGF1ZGl0IG1lbW9zIOKAlCBlYWNoIG9uZSBkZWNyeXB0YWJsZSBvbmx5IGJ5IHRoZQpkb25vcidzIHZpZXcga2V5LCBmb3IgY3J5cHRvZ3JhcGhpYyBzZWxlY3RpdmUgZGlzY2xvc3VyZS4AAAAAAAALY2xhaW1fbWVtb3MAAAAAAQAAAAAAAAAKcHJvZ3JhbV9pZAAAAAAABAAAAAEAAAPqAAAADg==",
         "AAAAAAAAAAAAAAALZ2V0X3Byb2dyYW0AAAAAAQAAAAAAAAAKcHJvZ3JhbV9pZAAAAAAABAAAAAEAAAPoAAAH0AAAAA1Qcm9ncmFtQ29uZmlnAAAA",
         "AAAAAAAAAAAAAAAMcG9vbF9iYWxhbmNlAAAAAAAAAAEAAAAL",
         "AAAAAAAAAEhEZXBsb3ktdGltZSBjb25zdHJ1Y3RvcjogYmluZCB0aGUgb3JnYW5pemF0aW9uIGFkbWluIGFuZCB0aGUgVVNEQyB0b2tlbi4AAAANX19jb25zdHJ1Y3RvcgAAAAAAAAIAAAAAAAAABWFkbWluAAAAAAAAEwAAAAAAAAAFdG9rZW4AAAAAAAATAAAAAA==",
@@ -183,6 +191,7 @@ export class Client extends ContractClient {
         claim: this.txFromJSON<Result<void>>,
         token: this.txFromJSON<string>,
         is_spent: this.txFromJSON<boolean>,
+        claim_memos: this.txFromJSON<Array<Buffer>>,
         get_program: this.txFromJSON<Option<ProgramConfig>>,
         pool_balance: this.txFromJSON<i128>,
         create_program: this.txFromJSON<Result<void>>,

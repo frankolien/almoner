@@ -8,8 +8,8 @@
 //! without the beneficiary revealing or signing with their identity.
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, BytesN, Env,
-    Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Bytes,
+    BytesN, Env, Vec,
 };
 
 mod verifier;
@@ -52,6 +52,7 @@ pub enum DataKey {
     Program(u32),
     Spent(u32, BytesN<32>),
     Nullifiers(u32),
+    Memos(u32),
 }
 
 // Storage TTL management (testnet-friendly ~30 day windows).
@@ -161,6 +162,7 @@ impl AlmonerPool {
         recipient: Address,
         payout_amount: i128,
         proof: Proof,
+        memo: Bytes,
     ) -> Result<(), Error> {
         if payout_amount <= 0 {
             return Err(Error::InvalidAmount);
@@ -186,7 +188,7 @@ impl AlmonerPool {
 
         // (1)+(2) Reconstruct public signals from TRUSTED state + bound values.
         let public_inputs = [
-            cfg.merkle_root.clone(),
+            cfg.merkle_root.clone(),  
             field_from_u32(&env, program_id),
             nullifier_hash.clone(),
             recipient_field,
@@ -212,6 +214,19 @@ impl AlmonerPool {
         env.storage()
             .persistent()
             .set(&DataKey::Nullifiers(program_id), &nullifiers);
+
+        // Record the encrypted audit memo — opaque bytes the contract never
+        // reads. Only the donor's view key can decrypt it, enabling
+        // reconstruction without the org's plaintext registration table.
+        let mut memos: Vec<Bytes> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Memos(program_id))
+            .unwrap_or_else(|| Vec::new(&env));
+        memos.push_back(memo);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Memos(program_id), &memos);
 
         cfg.total_claimed += payout_amount;
         cfg.claim_count += 1;
@@ -257,6 +272,15 @@ impl AlmonerPool {
         env.storage()
             .persistent()
             .get(&DataKey::Nullifiers(program_id))
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
+    /// The on-chain encrypted audit memos — each one decryptable only by the
+    /// donor's view key, for cryptographic selective disclosure.
+    pub fn claim_memos(env: Env, program_id: u32) -> Vec<Bytes> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Memos(program_id))
             .unwrap_or_else(|| Vec::new(&env))
     }
 

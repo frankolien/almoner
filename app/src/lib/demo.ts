@@ -12,6 +12,8 @@ import {
   bytesToField,
   fieldToBytes32,
   proofToSorobanBytes,
+  encryptMemo,
+  decryptMemo,
   type BeneficiaryRecord,
   type AuditReport,
 } from '@almoner/lib';
@@ -22,6 +24,8 @@ import {
   apiSponsor,
   apiClaim,
   apiSpent,
+  apiMemos,
+  apiViewKey,
   apiBalance,
 } from './serverApi.js';
 import type { DemoStore, StoredRecord, ProgramMeta } from './store.js';
@@ -136,6 +140,17 @@ export interface ClaimResult {
   usdcReceived: bigint;
 }
 
+// Encrypt the audit memo to the donor's view key — opaque to the world, posted
+// on-chain with the claim, decryptable only by the auditor.
+function encryptAuditMemo(cred: Credential): string {
+  if (!cred.auditorPublicKey) return '';
+  return encryptMemo(cred.auditorPublicKey, {
+    i: cred.path.leafIndex,
+    n: cred.name,
+    a: cred.entitlement,
+  });
+}
+
 async function proveFor(cred: Credential, freshPublicKey: string) {
   const record = credToRecord(cred);
   const policy = credToPolicy(cred);
@@ -172,6 +187,7 @@ export async function claimFromCredential(cred: Credential, log: Logger): Promis
     recipient: freshPublicKey,
     payoutAmount: BigInt(cred.entitlement),
     proof: proofHex,
+    memoHex: encryptAuditMemo(cred),
   });
   const usdcReceived = await apiBalance(freshPublicKey);
   log('USDC delivered to your fresh wallet.', 'ok');
@@ -191,6 +207,7 @@ export async function reclaimFromCredential(cred: Credential, log: Logger): Prom
       recipient: freshPublicKey,
       payoutAmount: BigInt(cred.entitlement),
       proof: proofHex,
+      memoHex: encryptAuditMemo(cred),
     });
     log('Unexpected: the second claim was accepted.', 'err');
     return false;
@@ -200,11 +217,44 @@ export async function reclaimFromCredential(cred: Credential, log: Logger): Prom
   }
 }
 
-/** Auditor: reconstruct who claimed from the on-chain spent set + registration table. */
+/** Auditor v1: reconstruct from the on-chain spent set + the registration table. */
 export async function runAudit(store: DemoStore): Promise<AuditReport> {
   const s = store.state;
   if (!s.program) throw new Error('no program registered');
   const records = s.records.map(toRecord);
   const spent = (await apiSpent(Number(s.program.programId))).map((h) => BigInt('0x' + h));
   return reconstruct(records, BigInt(s.program.programId), spent);
+}
+
+export interface ViewKeyAuditRow {
+  leafIndex: number;
+  name: string;
+  amount: bigint;
+}
+export interface ViewKeyAudit {
+  rows: ViewKeyAuditRow[];
+  total: bigint;
+  count: number;
+}
+
+/**
+ * Auditor v2 — cryptographic selective disclosure. Reconstruct purely from the
+ * on-chain encrypted memos + the donor's view key, WITHOUT the registration
+ * table. The public sees the same memos as opaque bytes; only this key reads them.
+ */
+export async function runAuditViaViewKey(store: DemoStore): Promise<ViewKeyAudit> {
+  const s = store.state;
+  if (!s.program) throw new Error('no program registered');
+  const viewKey = await apiViewKey(); // demo: served; production: held by the donor
+  const memosHex = await apiMemos(Number(s.program.programId));
+  const rows: ViewKeyAuditRow[] = [];
+  let total = 0n;
+  for (const m of memosHex) {
+    const memo = decryptMemo(viewKey, m);
+    if (!memo) continue;
+    rows.push({ leafIndex: memo.i, name: memo.n, amount: BigInt(memo.a) });
+    total += BigInt(memo.a);
+  }
+  rows.sort((a, b) => a.leafIndex - b.leafIndex);
+  return { rows, total, count: rows.length };
 }

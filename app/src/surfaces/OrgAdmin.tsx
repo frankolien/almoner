@@ -1,24 +1,46 @@
-import { useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import QRCode from 'qrcode';
 import { buildCohort } from '@almoner/lib';
 import type { DemoStore } from '../lib/store.js';
-import { registerCohort, fundProgram, toRecord, DEMO } from '../lib/demo.js';
+import type { Deployment } from '../lib/config.js';
+import { registerCohort, fundProgram, runAudit, toRecord, DEMO } from '../lib/demo.js';
 import { buildCredential, credentialUrl } from '../lib/credential.js';
-import { ActivityLog, useLog, usdc } from '../lib/ui.js';
+import { ActivityLog, Disclosure, Meta, useLog, usdc } from '../lib/ui.js';
+import ClaimLinkDrawer, { type ActiveCred } from '../components/ClaimLinkDrawer.js';
+import { IconSend, IconCheck } from '../landing/icons.js';
 
-interface ActiveCred {
-  index: number;
-  name: string;
-  url: string;
-  qr: string;
-}
+type Filter = 'all' | 'unsent' | 'claimed';
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'unsent', label: 'Not sent' },
+  { id: 'claimed', label: 'Claimed' },
+];
 
-export default function OrgAdmin({ store }: { store: DemoStore }) {
+export default function OrgAdmin({ store, deployment }: { store: DemoStore; deployment: Deployment }) {
   const { lines, log, clear } = useLog();
   const [busy, setBusy] = useState(false);
-  const [active, setActive] = useState<ActiveCred | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [drawer, setDrawer] = useState<ActiveCred | null>(null);
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [issued, setIssued] = useState<Set<number>>(new Set());
+  const [claimedSet, setClaimedSet] = useState<Set<number>>(new Set());
   const { state } = store;
+  const hasError = lines.some((l) => l.kind === 'err');
+
+  useEffect(() => {
+    let alive = true;
+    if (!state.program) {
+      setClaimedSet(new Set());
+      return;
+    }
+    runAudit(store)
+      .then((rep) => alive && setClaimedSet(new Set(rep.rows.filter((r) => r.claimed).map((r) => r.index))))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.program?.programId, state.records.length]);
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -33,134 +55,201 @@ export default function OrgAdmin({ store }: { store: DemoStore }) {
   }
 
   async function issueLink(index: number) {
-    setActive(null);
-    setCopied(false);
     const { tree } = await buildCohort(state.records.map(toRecord));
-    const cred = await buildCredential(state.records[index], index, tree, state.program!);
+    const cred = await buildCredential(
+      state.records[index],
+      index,
+      tree,
+      state.program!,
+      deployment.auditorPublicKey ?? '',
+    );
     const url = credentialUrl(cred);
     const qr = await QRCode.toDataURL(url, {
       margin: 1,
       width: 320,
-      errorCorrectionLevel: 'L', // credential is ~2.6KB; L gives the headroom
+      errorCorrectionLevel: 'L',
       color: { dark: '#0d0909', light: '#f2eeec' },
     });
-    setActive({ index, name: state.records[index].name, url, qr });
+    setIssued((s) => new Set(s).add(index));
+    setDrawer({ index, name: state.records[index].name, url, qr });
+  }
+
+  const rows = state.records
+    .map((r, i) => ({ r, i }))
+    .filter(({ r, i }) => {
+      if (query && !r.name.toLowerCase().includes(query.toLowerCase())) return false;
+      if (filter === 'claimed' && !claimedSet.has(i)) return false;
+      if (filter === 'unsent' && (claimedSet.has(i) || issued.has(i))) return false;
+      return true;
+    });
+
+  function statusChip(i: number) {
+    if (claimedSet.has(i))
+      return (
+        <span className="pill ok">
+          <IconCheck size={12} /> Claimed
+        </span>
+      );
+    if (issued.has(i)) return <span className="pill sent">Link issued</span>;
+    return (
+      <span className="pill" style={{ background: 'var(--bg-subtle)', color: 'var(--faint)' }}>
+        Not sent
+      </span>
+    );
   }
 
   return (
     <>
       <div className="panel">
-        <h2>Organization · register the eligible cohort</h2>
+        <h2>New disbursement program</h2>
         <p className="sub">
-          The org issues each beneficiary a secret, binds their attributes into a Poseidon leaf
-          commitment, builds a Merkle tree, and posts only the <b>root</b> on Soroban — then funds the
-          USDC pool and hands each beneficiary a claim credential.
+          Set who's eligible and how much each person receives. Everyone gets a private link to claim
+          their aid — no wallet, no fees, no crypto know-how on their end. Eligibility and payout are
+          handled for you behind the scenes.
         </p>
         <div className="grid">
-          <Stat label="Cohort size" value={String(DEMO.cohortSize)} />
+          <Stat label="Recipients" value={String(DEMO.cohortSize)} />
           <Stat label="Eligible region" value={DEMO.regionLabel} />
-          <Stat label="Age gate" value="≥ 18" />
-          <Stat label="Entitlement / tier" value={`${usdc(DEMO.entitlementBaseUnits)} USDC`} />
+          <Stat label="Age requirement" value="18 or older" />
+          <Stat label="Amount each" value={`${usdc(DEMO.entitlementBaseUnits)} USDC`} />
         </div>
         <div className="spacer" />
         <div className="row">
           <button className="primary" onClick={() => run(() => registerCohort(store, log))} disabled={busy}>
-            {state.createdOnChain ? 'Re-register a fresh cohort' : 'Register cohort + post root on-chain'}
+            {busy && !state.createdOnChain
+              ? 'Creating program…'
+              : state.createdOnChain
+                ? 'Start a new program'
+                : 'Create program'}
           </button>
           <button
             className="ghost"
             onClick={() => run(() => fundProgram(store, 500, log))}
             disabled={busy || !state.createdOnChain}
           >
-            Fund pool (+500 USDC)
+            Add 500 USDC
           </button>
         </div>
       </div>
 
       {state.program && (
         <div className="panel">
-          <div className="tinylabel">Registered program</div>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="tinylabel" style={{ marginBottom: 0 }}>Program #{state.program.programId}</div>
+            <span className="statuspill"><span className="d" /> Live</span>
+          </div>
+          <div className="spacer" />
           <div className="grid">
-            <Stat label="Program ID" value={`#${state.program.programId}`} accent />
-            <Stat label="Merkle root" value={short(state.root)} mono />
-            <Stat label="Min birth year" value={state.program.minBirthYear} />
-            <Stat label="Required tier" value={state.program.requiredTier} />
+            <Stat label="Recipients" value={String(state.records.length)} accent />
+            <Stat label="Amount each" value={`${usdc(DEMO.entitlementBaseUnits)} USDC`} />
+            <Stat label="Claimed" value={`${claimedSet.size} / ${state.records.length}`} />
+            <Stat label="Eligibility" value="Region · 18+" />
           </div>
           <div className="divider" />
-          <div className="tinylabel">Beneficiaries · issue each a claim credential to distribute</div>
+
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12, gap: 12 }}>
+            <div className="tinylabel" style={{ marginBottom: 0 }}>Recipients · send each their private claim link</div>
+            <div className="row" style={{ gap: 8 }}>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search recipients…"
+                style={{
+                  background: 'var(--bg-subtle)', border: '1px solid var(--line)', color: 'var(--text)',
+                  borderRadius: 8, padding: '7px 11px', fontSize: 13, fontFamily: 'inherit', width: 170,
+                }}
+              />
+              {FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  className="ghost"
+                  onClick={() => setFilter(f.id)}
+                  style={{
+                    padding: '7px 11px', fontSize: 12,
+                    ...(filter === f.id ? { borderColor: 'var(--accent-line)', color: 'var(--text)' } : {}),
+                  }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>#</th>
-                <th>Beneficiary</th>
+                <th>Recipient</th>
                 <th>Region</th>
-                <th>Birth year</th>
-                <th>Entitlement</th>
+                <th>Born</th>
+                <th>Amount</th>
+                <th>Status</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {state.records.map((r, i) => (
+              {rows.map(({ r, i }) => (
                 <tr key={i}>
                   <td>{i}</td>
                   <td>{r.name}</td>
                   <td>{r.regionCode}</td>
                   <td>{r.birthYear}</td>
                   <td>{usdc(r.entitlement)} USDC</td>
+                  <td>{statusChip(i)}</td>
                   <td style={{ textAlign: 'right' }}>
-                    <button className="ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => issueLink(i)}>
-                      Issue claim link
-                    </button>
+                    <span className="rowactions">
+                      <button className="ghost" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => issueLink(i)}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <IconSend size={13} /> {issued.has(i) || claimedSet.has(i) ? 'Re-send' : 'Send link'}
+                        </span>
+                      </button>
+                    </span>
                   </td>
                 </tr>
               ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="empty" style={{ padding: 22 }}>
+                    No recipients match “{query || filter}”.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
+          </div>
           <p className="note" style={{ marginTop: 14 }}>
-            Only the Merkle root and policy are on-chain. The registration table never is — it is what
-            later lets the donor (and only the donor) reconstruct who was paid.
+            This recipient list stays with you — it never goes on the public ledger. Only you and the
+            donor can ever see who claimed; to everyone else, payouts are unlinkable.
           </p>
-        </div>
-      )}
 
-      {active && (
-        <div className="panel">
-          <div className="tinylabel">Claim credential · {active.name} (beneficiary #{active.index})</div>
-          <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
-            <img
-              src={active.qr}
-              alt="claim QR"
-              width={180}
-              height={180}
-              style={{ borderRadius: 12, border: '1px solid var(--border)' }}
-            />
-            <div style={{ flex: 1, minWidth: 240 }}>
-              <p className="note" style={{ marginTop: 0 }}>
-                This is {active.name}’s self-contained aid voucher. In production it’s delivered
-                privately — printed card, QR at a registration center, or encrypted SMS. Whoever holds
-                it can claim <b>once</b>; the relayer sponsors all gas.
+          <div style={{ marginTop: 16 }}>
+            <Disclosure summary="What's actually posted on-chain" tone="bare">
+              <p className="note" style={{ margin: '2px 0 12px' }}>
+                We bind every recipient's attributes into a Poseidon leaf commitment, build a Merkle
+                tree, and post <b>only the root</b> on Stellar — never the list above. A claim proves
+                membership against this root without revealing which leaf.
               </p>
-              <div className="proofbox" style={{ marginBottom: 12 }}>{active.url.slice(0, 78)}…</div>
-              <div className="row">
-                <button
-                  className="ghost"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(active.url);
-                    setCopied(true);
-                  }}
-                >
-                  {copied ? 'Copied ✓' : 'Copy link'}
-                </button>
-                <button className="primary" onClick={() => window.open(active.url, '_blank')}>
-                  Open claim app ↗
-                </button>
-              </div>
-            </div>
+              <Meta label="Program ID">#{state.program.programId}</Meta>
+              <Meta label="Merkle root"><span className="mono">{short(state.root)}</span></Meta>
+              <Meta label="Min birth year">{state.program.minBirthYear}</Meta>
+              <Meta label="Required tier">{state.program.requiredTier}</Meta>
+            </Disclosure>
           </div>
         </div>
       )}
 
-      <ActivityLog lines={lines} />
+      {lines.length > 0 && (
+        <Disclosure
+          key={busy || hasError ? 'open' : 'closed'}
+          summary={busy ? 'Working…' : hasError ? 'Something went wrong — details' : 'Activity log'}
+          defaultOpen={busy || hasError}
+        >
+          <ActivityLog lines={lines} />
+        </Disclosure>
+      )}
+
+      <ClaimLinkDrawer cred={drawer} onClose={() => setDrawer(null)} />
     </>
   );
 }
@@ -169,7 +258,7 @@ function Stat({ label, value, accent, mono }: { label: string; value: string; ac
   return (
     <div className="field">
       <label>{label}</label>
-      <div style={{ fontSize: 16, fontWeight: 700 }} className={mono ? 'mono' : ''}>
+      <div style={{ fontSize: 16, fontWeight: 700 } as CSSProperties} className={mono ? 'mono' : ''}>
         <span style={accent ? { color: 'var(--accent)' } : undefined}>{value}</span>
       </div>
     </div>

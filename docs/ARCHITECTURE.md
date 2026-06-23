@@ -203,13 +203,30 @@ is a pure client: it generates the proof on-device and posts it; it never holds 
 served from `/api/config`; secrets live only in `.env` (gitignored). CI in `.github/workflows` runs the app
 typecheck/build, contract tests + wasm build, the circuit proof selftest, a vk.rs-sync check, and a secret scan.
 
+## 8. Cryptographic selective disclosure (the view key)
+
+Beyond the v1 audit (recompute nullifier hashes against the registration table), each claim posts an
+**audit memo encrypted to the donor's view key** — `lib/viewkey.ts`, NaCl `box` (X25519 +
+XSalsa20-Poly1305) with an ephemeral sender key, so memos are unlinkable and forward-secret. The
+beneficiary's client encrypts `{ leafIndex, name, amount }` to the auditor public key (carried in the
+credential) and the contract records the opaque bytes (`claim`'s `memo: Bytes`, read back via
+`claim_memos`).
+
+The auditor's **"v2" reconstruction** fetches those on-chain memos and decrypts them with the view
+(secret) key — recovering exactly who claimed and the total **with zero registration-table rows**. The
+public sees the identical bytes as meaningless ciphertext. This is selective disclosure, not trust:
+proving the data to the donor while revealing nothing to the world. Validated end-to-end on testnet
+(`scripts/browser-claim.ts` decrypts the on-chain memo after the claim).
+
 ### Still off-code in v1 (documented limits)
 
 - Org key = single env key → production: multisig / HSM, or operator Freighter wallet + RBAC.
 - Keys loaded from `.env` → production: KMS / Vault.
 - Sponsorship server-generates the fresh wallet → production: client-generated key + validated co-sign
   (fully non-custodial), plus relayer rate-limiting / Sybil resistance / a permissionless fallback.
-- Registration table (PII) generated on the operator device → production: encrypted server storage +
-  cryptographic view-key for the auditor.
+- The donor view key is server-served for the demo + global per deployment → production: per-program
+  auditor key held by the donor, never on the server; registration table in encrypted server storage.
+- Audit memo is best-effort (not bound to the proof) → production: commit the memo hash as a public
+  signal so a relayer can't post a mismatched memo.
 - Anchor cash-out referenced, not integrated; ZK trusted setup is a dev ceremony (prod: public MPC or a
   transparent proof system); contract is unaudited.

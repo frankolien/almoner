@@ -7,7 +7,7 @@
 //   tsx scripts/browser-claim.ts     (dev server must be running on :5173)
 //
 import puppeteer from 'puppeteer-core';
-import { buildCohort } from '@almoner/lib';
+import { buildCohort, decryptMemo } from '@almoner/lib';
 import { buildCredential, encodeCredential } from '../app/src/lib/credential.js';
 import { toRecord } from '../app/src/lib/demo.js';
 import type { StoredRecord, ProgramMeta } from '../app/src/lib/store.js';
@@ -53,8 +53,9 @@ async function main(): Promise<void> {
   console.log(`✓ Program #${store.program.programId} registered with ${store.records.length} beneficiaries.`);
 
   console.log('▸ Org issues a claim credential for beneficiary #2…');
+  const cfg = await (await fetch(`${ORIGIN.replace('5173', '8787')}/api/config`)).json();
   const { tree } = await buildCohort(store.records.map(toRecord));
-  const cred = await buildCredential(store.records[2], 2, tree, store.program);
+  const cred = await buildCredential(store.records[2], 2, tree, store.program, cfg.auditorPublicKey);
   const claimUrl = `${ORIGIN}/#claim=${encodeCredential(cred)}`;
   console.log(`  credential is ${claimUrl.length} chars (${cred.name})`);
 
@@ -82,6 +83,17 @@ async function main(): Promise<void> {
   if (!amount) throw new Error('claim did not complete (no amount shown)');
   console.log(`\n✓ Beneficiary received ${amount.trim()} — sponsored, zero-gas, identity never on-chain.`);
   console.log('  screenshot: /tmp/claim-success.png');
+
+  // Selective disclosure: the auditor decrypts the on-chain memos with the view key.
+  const programId = store.program.programId;
+  const { memos } = await (await fetch(`${ORIGIN.replace('5173', '8787')}/api/memos/${programId}`)).json();
+  const { secretKey } = await (await fetch(`${ORIGIN.replace('5173', '8787')}/api/auditor-viewkey`)).json();
+  console.log(`\n▸ Auditor decrypts ${memos.length} on-chain memo(s) with the donor view key (no registration table):`);
+  for (const m of memos) {
+    const d = decryptMemo(secretKey, m);
+    console.log('   ', d ? `#${d.i} ${d.n} → ${(Number(d.a) / 1e7).toFixed(2)} USDC` : '(opaque — not ours)');
+  }
+  console.log('  …the public sees these same bytes as meaningless ciphertext.');
 }
 
 main().catch((e: unknown) => {
