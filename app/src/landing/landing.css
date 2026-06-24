@@ -23,7 +23,7 @@
 .landing *::before,
 .landing *::after { box-sizing: border-box; }
 
-/* ---- moody backdrop: warm horizon glow + vignette ---- */
+/* ---- moody backdrop: warm horizon glow + vignette (lowered + calmer) ---- */
 .landing::before {
   content: '';
   position: absolute;
@@ -31,7 +31,7 @@
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(1300px 760px at 50% 96%, rgba(255, 92, 57, 0.26), transparent 60%),
+    radial-gradient(1300px 760px at 50% 104%, rgba(255, 92, 57, 0.18), transparent 62%),
     radial-gradient(900px 520px at 50% 8%, rgba(255, 120, 70, 0.05), transparent 60%),
     linear-gradient(180deg, #0c0707 0%, #0a0607 50%, #070506 100%);
 }
@@ -42,7 +42,7 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: radial-gradient(120% 100% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  background: radial-gradient(120% 105% at 50% 42%, transparent 58%, rgba(0, 0, 0, 0.48) 100%);
 }
 .ls-mountains {
   position: absolute;
@@ -52,16 +52,14 @@
   height: auto;
   z-index: 1;
   pointer-events: none;
-  opacity: 0.9;
+  opacity: 0.7;
 }
 .landing > *:not(.ls-mountains) { position: relative; z-index: 2; }
 
-
 .lwrap { max-width: 1180px; margin: 0 auto; padding: 0 40px; width: 100%; }
-@media (max-width: 640px) { .lwrap { padding: 0 22px; } }
 
 /* -------------------------------- nav ----------------------------------- */
-.ls-nav { padding: 26px 0; }
+.ls-nav { padding: clamp(20px, 3vw, 32px) 0; }
 .ls-nav-inner { display: flex; align-items: center; justify-content: space-between; }
 .brand { display: flex; align-items: center; gap: 11px; font-weight: 600; font-size: 21px; letter-spacing: -0.01em; cursor: pointer; }
 .brand .mark { display: grid; place-items: center; }
@@ -71,17 +69,18 @@
   display: inline-flex; align-items: center; gap: 9px;
   font-family: var(--display); font-weight: 600; cursor: pointer; text-decoration: none;
   border: 1px solid transparent; border-radius: 999px; white-space: nowrap;
-  transition: transform 0.12s, filter 0.2s, background 0.2s, border-color 0.2s;
+  transition: transform 0.12s, filter 0.2s, background 0.2s, border-color 0.2s, color 0.2s;
 }
 .btn:active { transform: translateY(1px); }
 .btn-primary { background: var(--accent); color: #1f0a04; box-shadow: 0 10px 34px -10px rgba(255, 92, 57, 0.6); }
 .btn-primary:hover { filter: brightness(1.08); }
-.btn-ghost { background: rgba(255, 255, 255, 0.04); border-color: rgba(255, 255, 255, 0.14); color: var(--text); }
-.btn-ghost:hover { border-color: var(--accent); }
+.btn-ghost { background: transparent; border-color: rgba(255, 255, 255, 0.10); color: var(--muted); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--text); }
 .btn-nav { padding: 9px 18px; font-size: 12.5px; letter-spacing: 0.12em; text-transform: uppercase; }
 .btn-lg { padding: 15px 30px; font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; }
 
 /* -------------------------------- hero ---------------------------------- */
+/* a floating, viewport-owned canvas — the hero breathes in negative space */
 .ls-hero {
   flex: 1;
   display: flex;
@@ -89,41 +88,60 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 30px 0;
+  min-height: clamp(560px, 86svh, 900px);
+  padding: clamp(56px, 12vh, 132px) 0;
 }
 .ls-eyebrow {
   display: inline-flex; align-items: center; gap: 8px;
-  font-size: 11.5px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;
-  color: var(--muted); margin-bottom: 30px;
+  font-size: 12px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: clamp(26px, 4.5vh, 44px);
+  animation: ls-rise var(--dur-slower) var(--ease-out) both;
 }
 .ls-eyebrow .dot-live { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px 1px rgba(255, 92, 57, 0.8); }
 .ls-hero h1 {
   font-weight: 500;
-  font-size: clamp(42px, 6.6vw, 88px);
-  line-height: 1.04;
+  font-size: clamp(40px, 7.2vw, 96px);
+  line-height: 1.02;
   letter-spacing: -0.03em;
+  max-width: 18ch;
+  text-wrap: balance;
   margin: 0;
+  animation: ls-rise var(--dur-slower) var(--ease-out) both;
+  animation-delay: 80ms;
 }
 .ls-hero h1 .accent-t { color: var(--accent); }
 .ls-hero h1 .white-t { color: var(--text); }
 .ls-hero p {
   color: var(--muted);
-  font-size: clamp(15px, 1.5vw, 18px);
+  font-size: clamp(15.5px, 1.6vw, 19px);
   line-height: 1.6;
   font-weight: 400;
-  max-width: 56ch;
-  margin: 28px auto 0;
+  max-width: 54ch;
+  margin: clamp(24px, 3.5vh, 38px) auto 0;
+  animation: ls-rise var(--dur-slower) var(--ease-out) both;
+  animation-delay: 160ms;
 }
-.ls-hero .ls-cta { margin-top: 40px; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.ls-hero .ls-cta {
+  margin-top: clamp(34px, 5vh, 56px);
+  display: flex; gap: 18px; flex-wrap: wrap; justify-content: center;
+  animation: ls-rise var(--dur-slower) var(--ease-out) both;
+  animation-delay: 240ms;
+}
+@keyframes ls-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
 
 /* ------------------------------- footer --------------------------------- */
-.ls-footer { padding: 40px 0 26px; }
+.ls-footer {
+  margin-top: clamp(72px, 12vh, 140px);
+  padding: clamp(48px, 8vh, 96px) 0 clamp(28px, 4vh, 40px);
+}
 .ls-footer-cols {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
+  gap: clamp(24px, 3vw, 36px);
 }
-@media (max-width: 760px) { .ls-footer-cols { grid-template-columns: 1fr 1fr; } }
 .ls-footer h4 {
   font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--text); font-weight: 600; margin: 0 0 16px;
@@ -136,7 +154,7 @@
 .ls-footer a:hover, .ls-footer .fitem:hover { color: var(--accent); }
 .ls-footer .soon { font-size: 9px; letter-spacing: 0.1em; color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 2px 5px; text-transform: uppercase; }
 
-.ls-footer-rule { height: 1px; background: var(--border); margin: 32px 0 22px; }
+.ls-footer-rule { height: 1px; background: var(--border); margin: clamp(28px, 5vh, 48px) 0 clamp(22px, 3vh, 32px); }
 .ls-footer-bottom { display: flex; justify-content: space-between; align-items: flex-start; gap: 30px; flex-wrap: wrap; }
 .ls-footer-brand { max-width: 520px; }
 .ls-footer-brand .brand { margin-bottom: 12px; }
@@ -144,6 +162,21 @@
 .ls-footer-legal { display: flex; gap: 22px; align-items: center; }
 .ls-footer-legal a { color: var(--faint); text-decoration: none; font-size: 12.5px; }
 .ls-footer-legal a:hover { color: var(--muted); }
-.ls-copy { color: var(--faint); font-size: 12.5px; margin-top: 18px; }
+.ls-copy { color: var(--faint); font-size: 12.5px; margin-top: 24px; }
 
 .float-actions { display: none; }
+
+/* ------------------------------- responsive ------------------------------ */
+@media (max-width: 640px) {
+  .lwrap { padding: 0 22px; }
+  .ls-hero {
+    min-height: clamp(540px, 90svh, 840px);
+    padding: clamp(48px, 10vh, 84px) 0;
+  }
+  .ls-footer { margin-top: clamp(64px, 11vh, 104px); }
+}
+@media (max-width: 760px) { .ls-footer-cols { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 420px) {
+  .ls-cta { width: 100%; }
+  .ls-cta .btn { width: 100%; justify-content: center; }
+}
