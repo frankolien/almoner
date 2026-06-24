@@ -56,6 +56,7 @@
 }
 .landing > *:not(.ls-mountains) { position: relative; z-index: 2; }
 
+
 .lwrap { max-width: 1180px; margin: 0 auto; padding: 0 40px; width: 100%; }
 @media (max-width: 640px) { .lwrap { padding: 0 22px; } }
 
