@@ -31,6 +31,7 @@ export default function Docs({
   const [copied, setCopied] = useState(false);
   const [helpful, setHelpful] = useState<null | boolean>(null);
   const [query, setQuery] = useState('');
+  const [navOpen, setNavOpen] = useState(false);
 
   const go = (s: string) => {
     window.location.hash = `docs/${s}`;
@@ -40,7 +41,16 @@ export default function Docs({
     window.scrollTo(0, 0);
     setCopied(false);
     setHelpful(null);
+    setNavOpen(false);
   }, [slug]);
+
+  // lock body scroll while the mobile nav drawer is open
+  useEffect(() => {
+    document.body.style.overflow = navOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [navOpen]);
 
   // Build the "On this page" rail from the rendered headings, assigning ids.
   useEffect(() => {
@@ -116,12 +126,19 @@ export default function Docs({
   return (
     <div className="docs">
       <header className="doc-top">
-        <button className="doc-brand" onClick={onHome}>
-          <Logo size={22} />
-          <span>Almoner<span className="dot">.</span></span>
-          <span className="doc-top-sep">/</span>
-          <span className="doc-top-docs">Docs</span>
-        </button>
+        <div className="doc-top-l">
+          <button className="doc-menu-btn" onClick={() => setNavOpen((o) => !o)} aria-label="Menu" aria-expanded={navOpen}>
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden>
+              <path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button className="doc-brand" onClick={onHome}>
+            <Logo size={22} />
+            <span>Almoner<span className="dot">.</span></span>
+            <span className="doc-top-sep">/</span>
+            <span className="doc-top-docs">Docs</span>
+          </button>
+        </div>
         <div className="doc-top-actions">
           <a className="doc-toplink" href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub ↗</a>
           <button className="doc-launch" onClick={onLaunch}>
@@ -130,8 +147,10 @@ export default function Docs({
         </div>
       </header>
 
+      {navOpen && <div className="doc-nav-scrim" onClick={() => setNavOpen(false)} />}
+
       <div className="doc-shell">
-        <aside className="doc-side">
+        <aside className={`doc-side ${navOpen ? 'nav-open' : ''}`}>
           <div className="doc-search">
             <IconSearch size={15} />
             <input
@@ -149,7 +168,10 @@ export default function Docs({
                 <button
                   key={s.slug}
                   className={`doc-side-item ${s.slug === slug ? 'active' : ''}`}
-                  onClick={() => go(s.slug)}
+                  onClick={() => {
+                    go(s.slug);
+                    setNavOpen(false);
+                  }}
                 >
                   {s.title}
                 </button>
