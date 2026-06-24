@@ -176,7 +176,3 @@
   .ls-footer { margin-top: clamp(64px, 11vh, 104px); }
 }
 @media (max-width: 760px) { .ls-footer-cols { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 420px) {
-  .ls-cta { width: 100%; }
-  .ls-cta .btn { width: 100%; justify-content: center; }
-}
