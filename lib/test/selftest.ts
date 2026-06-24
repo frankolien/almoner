@@ -116,7 +116,12 @@ async function main(): Promise<void> {
   console.log('\n✓ selftest passed — JS crypto matches the circuit, proof verifies, audit reconstructs.');
 }
 
-main().catch((e: unknown) => {
-  console.error('\n✗ selftest failed:', e instanceof Error ? e.message : e);
-  process.exit(1);
-});
+main()
+  // snarkjs/ffjavascript spawn worker threads for proving that keep Node's event
+  // loop alive, so the process won't exit on its own — exit explicitly or CI hangs
+  // until the 6h timeout.
+  .then(() => process.exit(0))
+  .catch((e: unknown) => {
+    console.error('\n✗ selftest failed:', e instanceof Error ? e.message : e);
+    process.exit(1);
+  });
